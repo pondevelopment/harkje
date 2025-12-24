@@ -25,6 +25,7 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const layoutBoundsRef = useRef<{ minX: number; minY: number; treeWidth: number; treeHeight: number } | null>(null);
   
   // State to track collapsed nodes
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
@@ -36,32 +37,75 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
   // Expose export function
   useImperativeHandle(ref, () => ({
     exportImage: async () => {
-      if (containerRef.current) {
-        try {
-          // 1. Warmup run
-          try {
-             await toPng(containerRef.current, { quality: 0.1, skipFonts: true, pixelRatio: 1 }); 
-          } catch (e) {
-             // Ignore errors in warmup
-          }
+      if (!containerRef.current) return;
+      if (!layoutBoundsRef.current) {
+        alert('Chart is not ready to export yet. Please try again in a moment.');
+        return;
+      }
 
-          // 2. Actual export
-          const dataUrl = await toPng(containerRef.current, { 
-             quality: 1.0, 
-             pixelRatio: 1, // Keep at 1 for reliable foreignObject rendering
-             cacheBust: true,
-             backgroundColor: '#f8fafc',
-             skipFonts: true,
-          });
-          
-          const link = document.createElement('a');
-          link.download = `org-chart-${new Date().toISOString().slice(0,10)}.png`;
-          link.href = dataUrl;
-          link.click();
-        } catch (err) {
-          console.error('Failed to export image', err);
-          alert('Failed to export image. Please try using a modern desktop browser (Chrome/Edge/Firefox).');
+      const padding = 40;
+      const { minX, minY, treeWidth, treeHeight } = layoutBoundsRef.current;
+
+      const exportWidth = Math.max(1, Math.ceil(treeWidth + padding * 2));
+      const exportHeight = Math.max(1, Math.ceil(treeHeight + padding * 2));
+
+      // Clone the chart container and render it offscreen so we can export a tightly-cropped image
+      // regardless of the current zoom/pan viewport.
+      const clone = containerRef.current.cloneNode(true) as HTMLDivElement;
+      clone.style.position = 'fixed';
+      clone.style.left = '-10000px';
+      clone.style.top = '0';
+      clone.style.width = `${exportWidth}px`;
+      clone.style.height = `${exportHeight}px`;
+      clone.style.overflow = 'hidden';
+      clone.style.background = '#f8fafc';
+      clone.style.pointerEvents = 'none';
+
+      document.body.appendChild(clone);
+
+      try {
+        clone.querySelectorAll('[data-export-exclude="true"]').forEach((el) => el.remove());
+
+        const clonedSvg = clone.querySelector('svg');
+        const clonedG = clonedSvg?.querySelector('g');
+
+        if (!clonedSvg || !clonedG) {
+          throw new Error('Could not find SVG content for export.');
         }
+
+        // Force the clone to the export size and reset the group transform so the chart is
+        // positioned tightly within the image.
+        clonedSvg.setAttribute('width', String(exportWidth));
+        clonedSvg.setAttribute('height', String(exportHeight));
+        clonedG.setAttribute('transform', `translate(${padding - minX},${padding - minY})`);
+
+        // 1. Warmup run
+        try {
+          await toPng(clone, { quality: 0.1, skipFonts: true, pixelRatio: 1, width: exportWidth, height: exportHeight });
+        } catch {
+          // Ignore errors in warmup
+        }
+
+        // 2. Actual export
+        const dataUrl = await toPng(clone, {
+          quality: 1.0,
+          pixelRatio: 1, // Keep at 1 for reliable foreignObject rendering
+          cacheBust: true,
+          backgroundColor: '#f8fafc',
+          skipFonts: true,
+          width: exportWidth,
+          height: exportHeight,
+        });
+
+        const link = document.createElement('a');
+        link.download = `org-chart-${new Date().toISOString().slice(0,10)}.png`;
+        link.href = dataUrl;
+        link.click();
+      } catch (err) {
+        console.error('Failed to export image', err);
+        alert('Failed to export image. Please try using a modern desktop browser (Chrome/Edge/Firefox).');
+      } finally {
+        clone.remove();
       }
     }
   }));
@@ -333,6 +377,8 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
     const treeWidth = maxX - minX;
     const treeHeight = maxY - minY;
 
+    layoutBoundsRef.current = { minX, minY, treeWidth, treeHeight };
+
     const g = svg.append("g");
 
     const zoom = d3.zoom<SVGSVGElement, unknown>()
@@ -528,7 +574,7 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
       </div>
       <svg ref={svgRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
       
-      <div className="absolute bottom-4 right-4 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-slate-100 text-[10px] text-slate-400 pointer-events-none select-none flex items-center gap-2">
+      <div data-export-exclude="true" className="absolute bottom-4 right-4 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-slate-100 text-[10px] text-slate-400 pointer-events-none select-none flex items-center gap-2">
          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
          Overlap-Free Engine v3 (Compact)
       </div>
