@@ -539,7 +539,13 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
                 Structure Data (CSV)
               </label>
               <p className="text-xs text-gray-500 mb-2">
-                One person per line: <code>user, manager, title, department, details</code>. Leave manager empty for the root.
+                Only <code>user</code> and <code>manager</code> are required. Leave <code>manager</code> empty (or <code>null</code>) for the single root.
+              </p>
+              <p className="text-xs text-gray-500 mb-2">
+                Leaf employees (who manage nobody) need no special handling — just include them as normal rows with a manager.
+              </p>
+              <p className="text-xs text-gray-500 mb-2">
+                Empty values are allowed for <code>title</code>/<code>department</code>/<code>details</code>. <code>user</code> must be filled.
               </p>
               <p className="text-xs text-gray-500 mb-2">
                 Example: <code>Jane Doe,,CEO,Executive,"Leads the company"</code>

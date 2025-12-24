@@ -45,8 +45,20 @@ The sidebar also supports a CSV-style input for quick editing.
 Format:
 
 - One person per line
-- Columns: `user, manager, title, department, details`
-- Leave `manager` empty (or set it to `null`) for the single root
+- Required columns: `user`, `manager`
+  - Leave `manager` empty (or set it to `null`) for the single root
+- Optional columns (if present): `title`, `department`, `details`
+
+Empty values:
+
+- `user` must not be empty.
+- `manager` may be empty only for the single root row.
+- `title`, `department`, and `details` may be empty.
+
+Leaf employees (people who manage nobody):
+
+- Just include them as normal rows with a `manager` value.
+- They do not need any special marker — they simply won’t appear as a manager for anyone else.
 
 Example:
 
