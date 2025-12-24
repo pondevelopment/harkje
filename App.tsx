@@ -3,11 +3,10 @@ import { OrgChart, OrgChartRef } from './components/OrgChart';
 import { InputPanel } from './components/InputPanel';
 import { INITIAL_DATA } from './constants';
 import { OrgNode, LayoutDirection } from './types';
-import { Menu, X, ArrowDown, ArrowRight, Ratio, Download } from 'lucide-react';
+import { Menu, X, Ratio, Download } from 'lucide-react';
 
 const App: React.FC = () => {
   const [data, setData] = useState<OrgNode>(INITIAL_DATA);
-  const [layoutDirection, setLayoutDirection] = useState<LayoutDirection>(LayoutDirection.TopDown);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [targetAspectRatio, setTargetAspectRatio] = useState<number>(1); // Default 1:1
   const chartRef = useRef<OrgChartRef>(null);
@@ -141,32 +140,15 @@ const App: React.FC = () => {
                 </div>
             </div>
 
-            {/* Actions Group */}
-            <div className="bg-white/90 backdrop-blur rounded-lg shadow-sm border border-gray-200 p-1 flex">
-                <button 
-                    onClick={() => setLayoutDirection(LayoutDirection.TopDown)}
-                    className={`p-2 rounded-md transition-all ${layoutDirection === LayoutDirection.TopDown ? 'bg-indigo-100 text-indigo-700 shadow-sm' : 'text-gray-500 hover:bg-gray-50'}`}
-                    title="Vertical Layout"
-                >
-                    <ArrowDown size={20} />
-                </button>
-                <div className="w-px bg-gray-200 mx-1 my-1"></div>
-                <button 
-                    onClick={() => setLayoutDirection(LayoutDirection.LeftRight)}
-                    className={`p-2 rounded-md transition-all ${layoutDirection === LayoutDirection.LeftRight ? 'bg-indigo-100 text-indigo-700 shadow-sm' : 'text-gray-500 hover:bg-gray-50'}`}
-                    title="Horizontal Layout"
-                >
-                    <ArrowRight size={20} />
-                </button>
-                <div className="w-px bg-gray-200 mx-1 my-1"></div>
-                <button 
-                    onClick={handleDownload}
-                    className="p-2 rounded-md text-gray-500 hover:bg-indigo-50 hover:text-indigo-700 transition-all"
-                    title="Export as PNG"
-                >
-                    <Download size={20} />
-                </button>
-            </div>
+            {/* Download */}
+            <button 
+              onClick={handleDownload}
+              className="bg-white/90 backdrop-blur rounded-lg shadow-sm border border-gray-200 px-3 py-2 flex items-center gap-2 text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-all"
+              title="Download image (PNG)"
+            >
+              <Download size={18} />
+              <span className="text-sm font-medium">Download image</span>
+            </button>
         </div>
 
         {/* Chart View */}
@@ -174,7 +156,7 @@ const App: React.FC = () => {
           <OrgChart 
             ref={chartRef}
             data={data} 
-            direction={layoutDirection} 
+            direction={LayoutDirection.TopDown} 
             targetAspectRatio={targetAspectRatio} 
           />
         </div>

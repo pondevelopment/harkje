@@ -38,7 +38,15 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
   useImperativeHandle(ref, () => ({
     exportImage: async () => {
       if (!containerRef.current) return;
+      if (!svgRef.current) return;
       if (!layoutBoundsRef.current) {
+        alert('Chart is not ready to export yet. Please try again in a moment.');
+        return;
+      }
+
+      const svgEl = svgRef.current;
+      const gEl = svgEl.querySelector('g');
+      if (!gEl) {
         alert('Chart is not ready to export yet. Please try again in a moment.');
         return;
       }
@@ -49,51 +57,49 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
       const exportWidth = Math.max(1, Math.ceil(treeWidth + padding * 2));
       const exportHeight = Math.max(1, Math.ceil(treeHeight + padding * 2));
 
-      // Clone the chart container and render it offscreen so we can export a tightly-cropped image
-      // regardless of the current zoom/pan viewport.
-      const clone = containerRef.current.cloneNode(true) as HTMLDivElement;
-      clone.style.position = 'fixed';
-      clone.style.left = '-10000px';
-      clone.style.top = '0';
-      clone.style.width = `${exportWidth}px`;
-      clone.style.height = `${exportHeight}px`;
-      clone.style.overflow = 'hidden';
-      clone.style.background = '#f8fafc';
-      clone.style.pointerEvents = 'none';
+      // Some browsers can export an empty PNG when cloning nodes containing <foreignObject>.
+      // Instead, temporarily resize and re-position the live chart to the tight bounds,
+      // export it, and then restore the original state.
+      const containerEl = containerRef.current;
+      const prevContainerWidth = containerEl.style.width;
+      const prevContainerHeight = containerEl.style.height;
+      const prevContainerOverflow = containerEl.style.overflow;
+      const prevContainerBg = containerEl.style.background;
 
-      document.body.appendChild(clone);
+      const prevSvgWidth = svgEl.getAttribute('width');
+      const prevSvgHeight = svgEl.getAttribute('height');
+      const prevGTransform = gEl.getAttribute('transform');
+
+      const excludedEls = Array.from(containerEl.querySelectorAll('[data-export-exclude="true"]')) as HTMLElement[];
+      const prevExcludedDisplay = excludedEls.map(el => el.style.display);
 
       try {
-        clone.querySelectorAll('[data-export-exclude="true"]').forEach((el) => el.remove());
+        excludedEls.forEach(el => (el.style.display = 'none'));
 
-        const clonedSvg = clone.querySelector('svg[data-chart-svg="true"]') as SVGSVGElement | null;
-        const clonedG = clonedSvg?.querySelector('g');
+        containerEl.style.width = `${exportWidth}px`;
+        containerEl.style.height = `${exportHeight}px`;
+        containerEl.style.overflow = 'hidden';
+        containerEl.style.background = '#f8fafc';
 
-        if (!clonedSvg || !clonedG) {
-          throw new Error('Could not find SVG content for export.');
-        }
+        svgEl.setAttribute('width', String(exportWidth));
+        svgEl.setAttribute('height', String(exportHeight));
+        gEl.setAttribute('transform', `translate(${padding - minX},${padding - minY})`);
 
-        // Force the clone to the export size and reset the group transform so the chart is
-        // positioned tightly within the image.
-        clonedSvg.setAttribute('width', String(exportWidth));
-        clonedSvg.setAttribute('height', String(exportHeight));
-        clonedG.setAttribute('transform', `translate(${padding - minX},${padding - minY})`);
-
-        // Give the browser a moment to layout/paint the cloned SVG + foreignObject HTML.
+        // Let layout/paint settle (foreignObject is sensitive here).
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
         // 1. Warmup run
         try {
-          await toPng(clone, { quality: 0.1, skipFonts: true, pixelRatio: 1, width: exportWidth, height: exportHeight });
+          await toPng(containerEl, { quality: 0.1, skipFonts: true, pixelRatio: 1, width: exportWidth, height: exportHeight });
         } catch {
           // Ignore errors in warmup
         }
 
         // 2. Actual export
-        const dataUrl = await toPng(clone, {
+        const dataUrl = await toPng(containerEl, {
           quality: 1.0,
-          pixelRatio: 1, // Keep at 1 for reliable foreignObject rendering
+          pixelRatio: 1,
           cacheBust: true,
           backgroundColor: '#f8fafc',
           skipFonts: true,
@@ -109,7 +115,21 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
         console.error('Failed to export image', err);
         alert('Failed to export image. Please try using a modern desktop browser (Chrome/Edge/Firefox).');
       } finally {
-        clone.remove();
+        // Restore DOM state
+        excludedEls.forEach((el, i) => (el.style.display = prevExcludedDisplay[i] ?? ''));
+
+        containerEl.style.width = prevContainerWidth;
+        containerEl.style.height = prevContainerHeight;
+        containerEl.style.overflow = prevContainerOverflow;
+        containerEl.style.background = prevContainerBg;
+
+        if (prevSvgWidth === null) svgEl.removeAttribute('width');
+        else svgEl.setAttribute('width', prevSvgWidth);
+        if (prevSvgHeight === null) svgEl.removeAttribute('height');
+        else svgEl.setAttribute('height', prevSvgHeight);
+
+        if (prevGTransform === null) gEl.removeAttribute('transform');
+        else gEl.setAttribute('transform', prevGTransform);
       }
     }
   }));
