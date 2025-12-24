@@ -1,68 +1,74 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useMemo, useState } from 'react';
 
-export type ThemeId = 'light' | 'dark' | 'highContrast';
+/**
+ * Chart-only theme.
+ *
+ * This deliberately does NOT modify the document root (no html[data-theme]).
+ * The chart applies the theme by setting `data-chart-theme="..."` on the
+ * chart container element.
+ */
 
-export const THEMES: Array<{ id: ThemeId; label: string }> = [
+export type ChartThemeId = 'light' | 'dark' | 'highContrast';
+
+export const CHART_THEMES: Array<{ id: ChartThemeId; label: string }> = [
   { id: 'light', label: 'Light' },
   { id: 'dark', label: 'Dark' },
   { id: 'highContrast', label: 'High Contrast' },
 ];
 
-const STORAGE_KEY = 'harkje.theme';
+const STORAGE_KEY = 'harkje.chartTheme';
 
-const isThemeId = (value: unknown): value is ThemeId => {
+const isChartThemeId = (value: unknown): value is ChartThemeId => {
   return value === 'light' || value === 'dark' || value === 'highContrast';
 };
 
-const getSystemTheme = (): ThemeId => {
+const getSystemTheme = (): ChartThemeId => {
   if (typeof window === 'undefined') return 'light';
   return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 };
 
-export const getInitialTheme = (): ThemeId => {
+export const getInitialChartTheme = (): ChartThemeId => {
   if (typeof window === 'undefined') return 'light';
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (isThemeId(saved)) return saved;
+    if (isChartThemeId(saved)) return saved;
   } catch {
     // ignore
   }
   return getSystemTheme();
 };
 
-export const applyTheme = (themeId: ThemeId) => {
-  if (typeof document === 'undefined') return;
-  document.documentElement.dataset.theme = themeId;
+type ChartThemeContextValue = {
+  chartThemeId: ChartThemeId;
+  setChartThemeId: (next: ChartThemeId) => void;
 };
 
-type ThemeContextValue = {
-  themeId: ThemeId;
-  setThemeId: (next: ThemeId) => void;
-};
+const ChartThemeContext = createContext<ChartThemeContextValue | null>(null);
 
-const ThemeContext = createContext<ThemeContextValue | null>(null);
+export const ChartThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
+  const [chartThemeId, setChartThemeIdState] = useState<ChartThemeId>(() => getInitialChartTheme());
 
-export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
-  const [themeId, setThemeId] = useState<ThemeId>(() => getInitialTheme());
-
-  useEffect(() => {
-    applyTheme(themeId);
+  const setChartThemeId = (next: ChartThemeId) => {
+    setChartThemeIdState(next);
     try {
-      window.localStorage.setItem(STORAGE_KEY, themeId);
+      window.localStorage.setItem(STORAGE_KEY, next);
     } catch {
       // ignore
     }
-  }, [themeId]);
+  };
 
-  const value = useMemo<ThemeContextValue>(() => ({ themeId, setThemeId }), [themeId]);
+  const value = useMemo<ChartThemeContextValue>(
+    () => ({ chartThemeId, setChartThemeId }),
+    [chartThemeId]
+  );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return <ChartThemeContext.Provider value={value}>{children}</ChartThemeContext.Provider>;
 };
 
-export const useTheme = (): ThemeContextValue => {
-  const ctx = useContext(ThemeContext);
+export const useChartTheme = (): ChartThemeContextValue => {
+  const ctx = useContext(ChartThemeContext);
   if (!ctx) {
-    throw new Error('useTheme must be used within ThemeProvider');
+    throw new Error('useChartTheme must be used within ChartThemeProvider');
   }
   return ctx;
 };

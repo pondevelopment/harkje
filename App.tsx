@@ -4,10 +4,10 @@ import { InputPanel } from './components/InputPanel';
 import { INITIAL_DATA } from './constants';
 import { OrgNode, LayoutDirection } from './types';
 import { Menu, X, Ratio, Download } from 'lucide-react';
-import { ThemeProvider, THEMES, ThemeId, useTheme } from './theme';
+import { ChartThemeProvider, CHART_THEMES, ChartThemeId, useChartTheme } from './theme';
 
 const AppInner: React.FC = () => {
-  const { themeId, setThemeId } = useTheme();
+  const { chartThemeId, setChartThemeId } = useChartTheme();
   const [data, setData] = useState<OrgNode>(INITIAL_DATA);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [targetAspectRatio, setTargetAspectRatio] = useState<number>(1); // Default 1:1
@@ -164,24 +164,24 @@ const AppInner: React.FC = () => {
         {/* Toolbar */}
         <div className="absolute top-6 right-6 z-10 flex gap-4 items-start">
 
-            {/* Theme */}
+            {/* Chart theme */}
             <div className="backdrop-blur rounded-lg shadow-sm px-3 py-2 flex items-center gap-2" style={{ backgroundColor: 'var(--overlay-bg)', border: '1px solid var(--overlay-border)', color: 'var(--text)' }}>
-              <label className="text-xs font-semibold" style={{ color: 'var(--muted)' }} htmlFor="theme">
-                Theme
+              <label className="text-xs font-semibold" style={{ color: 'var(--muted)' }} htmlFor="chart-theme">
+                Chart theme
               </label>
               <select
-                id="theme"
-                value={themeId}
-                onChange={(e) => setThemeId(e.target.value as ThemeId)}
+                id="chart-theme"
+                value={chartThemeId}
+                onChange={(e) => setChartThemeId(e.target.value as ChartThemeId)}
                 className="text-sm outline-none rounded-md px-2 py-1"
                 style={{
                   color: 'var(--text)',
                   backgroundColor: 'var(--surface)',
                   border: '1px solid var(--border)',
                 }}
-                title="Theme"
+                title="Chart theme"
               >
-                {THEMES.map(t => (
+                {CHART_THEMES.map(t => (
                   <option key={t.id} value={t.id} style={{ backgroundColor: 'var(--surface)', color: 'var(--text)' }}>
                     {t.label}
                   </option>
@@ -228,7 +228,7 @@ const AppInner: React.FC = () => {
             data={data} 
             direction={LayoutDirection.TopDown} 
             targetAspectRatio={targetAspectRatio} 
-            themeId={themeId}
+            chartThemeId={chartThemeId}
           />
         </div>
       </div>
@@ -238,9 +238,9 @@ const AppInner: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <ThemeProvider>
+    <ChartThemeProvider>
       <AppInner />
-    </ThemeProvider>
+    </ChartThemeProvider>
   );
 };
 

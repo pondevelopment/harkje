@@ -26,6 +26,16 @@
         --chart-grid-dot: rgba(79, 70, 229, 1);
         --chart-link: #cbd5e1;
 
+        /* Typography (chart) */
+        --chart-font-family: 'Inter', sans-serif;
+        --card-name-size: 12px;
+        --card-name-weight: 700;
+        --card-title-size: 10px;
+        --card-title-weight: 600;
+        --card-dept-size: 9px;
+        --card-dept-weight: 500;
+        --badge-count-size: 9px;
+
         /* Node card */
         --card-bg: #ffffff;
         --card-border: #e2e8f0;
@@ -33,6 +43,7 @@
         --card-name: #0f172a;
         --card-title: #4f46e5;
         --card-dept: #64748b;
+        --card-icon: #cbd5e1;
         --badge-bg: #eef2ff;
         --badge-fg: #4f46e5;
         --badge-border: #c7d2fe;
@@ -40,13 +51,17 @@
         --badge-fg-collapsed: #ffffff;
         --badge-border-collapsed: #4f46e5;
 
+        /* Collapsed notch */
+        --card-notch-bg: var(--card-bg);
+        --card-notch-border: var(--card-border);
+
         /* Overlay pills */
         --overlay-bg: rgba(255, 255, 255, 0.8);
         --overlay-text: #64748b;
         --overlay-border: rgba(226, 232, 240, 1);
       }
 
-      html[data-theme="dark"] {
+      [data-chart-theme="dark"] {
         --app-bg: #0b1220;
         --surface: #0f172a;
         --surface-2: #111c33;
@@ -68,6 +83,7 @@
         --card-name: #e5e7eb;
         --card-title: #a5b4fc;
         --card-dept: #94a3b8;
+        --card-icon: #334155;
         --badge-bg: rgba(99, 102, 241, 0.18);
         --badge-fg: #c7d2fe;
         --badge-border: rgba(99, 102, 241, 0.45);
@@ -80,7 +96,7 @@
         --overlay-border: rgba(35, 48, 85, 1);
       }
 
-      html[data-theme="highContrast"] {
+      [data-chart-theme="highContrast"] {
         --app-bg: #000000;
         --surface: #000000;
         --surface-2: #0a0a0a;
@@ -102,6 +118,7 @@
         --card-name: #ffffff;
         --card-title: #ffffff;
         --card-dept: #ffffff;
+        --card-icon: #ffffff;
         --badge-bg: #ffffff;
         --badge-fg: #000000;
         --badge-border: #ffffff;

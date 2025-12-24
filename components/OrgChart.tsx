@@ -2,13 +2,13 @@ import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } f
 import * as d3 from 'd3';
 import { toPng } from 'html-to-image';
 import { OrgNode, LayoutDirection } from '../types';
-import type { ThemeId } from '../theme';
+import type { ChartThemeId } from '../theme';
 
 interface OrgChartProps {
   data: OrgNode;
   direction: LayoutDirection;
   targetAspectRatio: number;
-  themeId: ThemeId;
+  chartThemeId: ChartThemeId;
 }
 
 export interface OrgChartRef {
@@ -23,7 +23,7 @@ const GAP_V = 48;         // Reduced from 80
 const GRID_GAP = 12;      // Reduced from 20
 const CHANNEL_WIDTH = 30; // Reduced from 70
 
-export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, direction, targetAspectRatio, themeId }, ref) => {
+export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, direction, targetAspectRatio, chartThemeId }, ref) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -521,7 +521,7 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
             position: relative; z-index: 10;
             cursor: ${hasChildren ? 'pointer' : 'default'};
             box-sizing: border-box;
-            font-family: sans-serif;
+            font-family: var(--chart-font-family, sans-serif);
         `;
 
         const headerStyle = `
@@ -534,14 +534,14 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
         `;
 
         const nameStyle = `
-          color: var(--card-name); font-weight: 700; font-size: 12px; 
+          color: var(--card-name); font-weight: var(--card-name-weight, 700); font-size: var(--card-name-size, 12px); 
             line-height: 1.2; 
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             display: block; margin-bottom: 2px;
         `;
 
         const titleStyle = `
-          color: var(--card-title); font-weight: 600; font-size: 10px; 
+          color: var(--card-title); font-weight: var(--card-title-weight, 600); font-size: var(--card-title-size, 10px); 
             line-height: 1.2; 
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             display: block;
@@ -553,7 +553,7 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
         `;
 
         const deptStyle = `
-          font-size: 9px; color: var(--card-dept); font-weight: 500; 
+          font-size: var(--card-dept-size, 9px); color: var(--card-dept); font-weight: var(--card-dept-weight, 500); 
             text-transform: uppercase; letter-spacing: 0.025em; 
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
             display: block;
@@ -578,7 +578,7 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
              </div>
              ${hasChildren ? 
                 `<div style="${badgeStyle}">
-                   <span style="font-size: 9px; font-weight: 700; margin-right: 1px; line-height: 1;">${childCount}</span>
+                 <span style="font-size: var(--badge-count-size, 9px); font-weight: 700; margin-right: 1px; line-height: 1;">${childCount}</span>
                    ${isCollapsed 
                      ? '<svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" style="display: block;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>' 
                      : '<svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" style="display: block;"><line x1="5" y1="12" x2="19" y2="12"></line></svg>'
@@ -590,21 +590,26 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
             <span style="${deptStyle}">${d.data.department || 'Org'}</span>
             ${d.data.details ? `
             <div style="position: relative;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #cbd5e1; cursor: help; display: block;"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--card-icon, #cbd5e1); cursor: help; display: block;"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
             </div>` : ''}
           </div>
           
           ${isCollapsed && hasChildren ? `
-            <div style="position: absolute; bottom: -0.25rem; left: 50%; transform: translateX(-50%); width: 1.5rem; height: 0.25rem; background-color: white; border: 1px solid #e5e7eb; border-top: none; border-bottom-right-radius: 0.25rem; border-bottom-left-radius: 0.25rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);"></div>
+            <div style="position: absolute; bottom: -0.25rem; left: 50%; transform: translateX(-50%); width: 1.5rem; height: 0.25rem; background-color: var(--card-notch-bg, var(--card-bg)); border: 1px solid var(--card-notch-border, var(--card-border)); border-top: none; border-bottom-right-radius: 0.25rem; border-bottom-left-radius: 0.25rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);"></div>
           ` : ''}
         </div>
       `;
       });
 
-  }, [data, dimensions, direction, targetAspectRatio, collapsedIds, themeId]);
+  }, [data, dimensions, direction, targetAspectRatio, collapsedIds, chartThemeId]);
 
   return (
-    <div ref={containerRef} className="w-full h-full relative overflow-hidden" style={{ backgroundColor: 'var(--chart-bg)' }}>
+    <div
+      ref={containerRef}
+      data-chart-theme={chartThemeId}
+      className="w-full h-full relative overflow-hidden"
+      style={{ backgroundColor: 'var(--chart-bg)' }}
+    >
      <div
        data-export-exclude="true"
        className="absolute inset-0 opacity-[0.03] pointer-events-none" 

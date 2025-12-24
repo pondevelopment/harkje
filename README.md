@@ -17,16 +17,16 @@ It includes:
 
 ## Themes
 
-Harkje supports a small built-in theme system (Light / Dark / High Contrast) that works with the chart renderer and PNG export.
+Harkje supports a small built-in **chart theme** system (Light / Dark / High Contrast) that works with the org chart renderer and PNG export.
 
-- Theme tokens are defined as **CSS variables** in `index.html` (using `html[data-theme="..."]`).
-- The active theme is applied by setting `document.documentElement.dataset.theme`.
-- The selection is persisted in `localStorage` under `harkje.theme`.
+- Theme tokens are defined as **CSS variables** in `index.html` (using `[data-chart-theme="..."]`).
+- The active theme is applied to the chart by setting `data-chart-theme="..."` on the chart container element.
+- The selection is persisted in `localStorage` under `harkje.chartTheme`.
 
 Adding a new theme:
 
-1. Add a new `html[data-theme="yourThemeId"] { ... }` block in `index.html` with the same token names.
-2. Add the theme id + label to `THEMES` in `theme.tsx`.
+1. Add a new `[data-chart-theme="yourThemeId"] { ... }` block in `index.html` with the same token names.
+2. Add the theme id + label to `CHART_THEMES` in `theme.tsx`.
 
 Note: for SVG link lines the app resolves `--chart-link` to a concrete color at runtime (more reliable for export).
 
