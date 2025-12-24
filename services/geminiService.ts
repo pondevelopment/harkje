@@ -180,7 +180,13 @@ export const generateOrgStructure = async (description: string): Promise<FlatNod
 };
 
 export const generateRandomOrgStructure = async (size: OrgSize, theme: string): Promise<FlatNode[]> => {
-  const rng = makeRng(`quick:${size}:${theme || "default"}`);
+export const generateRandomOrgStructure = async (
+  size: OrgSize,
+  theme: string,
+  nonce?: string | number,
+): Promise<FlatNode[]> => {
+  const salt = nonce === undefined || nonce === null ? '' : String(nonce);
+  const rng = makeRng(`quick:${size}:${theme || "default"}:${salt}`);
   const count = sizeToCount(rng, size);
   return generateFlatOrg(rng, count, theme);
 };

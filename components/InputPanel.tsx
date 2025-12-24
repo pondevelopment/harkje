@@ -272,6 +272,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
   // Quick Gen State
   const [quickTheme, setQuickTheme] = useState('Tech Startup');
   const [quickSize, setQuickSize] = useState<'small' | 'medium' | 'large'>('medium');
+  const [quickRunId, setQuickRunId] = useState(0);
 
   // Sync JSON editor when the chart updates (e.g. from AI)
   useEffect(() => {
@@ -363,7 +364,9 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
 
   const handleQuickGenerate = () => {
       if (!quickTheme.trim()) return;
-      handleDataGeneration(generateRandomOrgStructure(quickSize, quickTheme));
+      const nextRunId = quickRunId + 1;
+      setQuickRunId(nextRunId);
+      handleDataGeneration(generateRandomOrgStructure(quickSize, quickTheme, nextRunId));
   };
 
   const handleJsonUpdate = () => {
