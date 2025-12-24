@@ -67,6 +67,7 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
       const prevContainerHeight = containerEl.style.height;
       const prevContainerOverflow = containerEl.style.overflow;
       const prevContainerBg = containerEl.style.background;
+      const prevContainerBgColor = containerEl.style.backgroundColor;
 
       const prevSvgWidth = svgEl.getAttribute('width');
       const prevSvgHeight = svgEl.getAttribute('height');
@@ -81,7 +82,9 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
         containerEl.style.width = `${exportWidth}px`;
         containerEl.style.height = `${exportHeight}px`;
         containerEl.style.overflow = 'hidden';
-        containerEl.style.background = 'transparent';
+        // Do not touch the `background` shorthand here; it can override and clear
+        // the inline `backgroundColor` React sets for the chart.
+        containerEl.style.backgroundColor = 'transparent';
 
         svgEl.setAttribute('width', String(exportWidth));
         svgEl.setAttribute('height', String(exportHeight));
@@ -131,6 +134,7 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
         containerEl.style.height = prevContainerHeight;
         containerEl.style.overflow = prevContainerOverflow;
         containerEl.style.background = prevContainerBg;
+        containerEl.style.backgroundColor = prevContainerBgColor;
 
         if (prevSvgWidth === null) svgEl.removeAttribute('width');
         else svgEl.setAttribute('width', prevSvgWidth);
