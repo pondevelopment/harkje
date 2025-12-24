@@ -79,7 +79,7 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
         containerEl.style.width = `${exportWidth}px`;
         containerEl.style.height = `${exportHeight}px`;
         containerEl.style.overflow = 'hidden';
-        containerEl.style.background = '#f8fafc';
+        containerEl.style.background = 'transparent';
 
         svgEl.setAttribute('width', String(exportWidth));
         svgEl.setAttribute('height', String(exportHeight));
@@ -91,7 +91,14 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
 
         // 1. Warmup run
         try {
-          await toPng(containerEl, { quality: 0.1, skipFonts: true, pixelRatio: 1, width: exportWidth, height: exportHeight });
+          await toPng(containerEl, {
+            quality: 0.1,
+            skipFonts: true,
+            pixelRatio: 1,
+            width: exportWidth,
+            height: exportHeight,
+            backgroundColor: 'transparent',
+          });
         } catch {
           // Ignore errors in warmup
         }
@@ -101,7 +108,7 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
           quality: 1.0,
           pixelRatio: 1,
           cacheBust: true,
-          backgroundColor: '#f8fafc',
+          backgroundColor: 'transparent',
           skipFonts: true,
           width: exportWidth,
           height: exportHeight,
@@ -593,10 +600,19 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
 
   return (
     <div ref={containerRef} className="w-full h-full bg-slate-50/50 relative overflow-hidden">
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none" 
+     <div
+       data-export-exclude="true"
+       className="absolute inset-0 opacity-[0.03] pointer-events-none" 
            style={{ backgroundImage: 'radial-gradient(#4f46e5 1px, transparent 1px)', backgroundSize: '16px 16px' }}>
       </div>
       <svg data-chart-svg="true" ref={svgRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
+
+      <div
+        data-export-exclude="true"
+        className="absolute bottom-4 left-4 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-slate-100 text-[10px] text-slate-500 pointer-events-none select-none"
+      >
+        No data is shared — everything stays local in your browser.
+      </div>
       
       
       

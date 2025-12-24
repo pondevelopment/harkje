@@ -457,6 +457,20 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
       <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
         {activeTab === 'ai' ? (
           <div className="space-y-8">
+            {/* How-to */}
+            <div className="bg-indigo-50/60 p-4 rounded-xl border border-indigo-100">
+              <h2 className="text-sm font-bold text-gray-800">How to use Harkje</h2>
+              <ul className="mt-2 space-y-1 text-xs text-gray-600 list-disc pl-4">
+                <li>Use <span className="font-semibold">Generator</span> to create a quick example org from a theme + size.</li>
+                <li>Use <span className="font-semibold">List Editor</span> (JSON) or <span className="font-semibold">CSV</span> to paste/edit your own org data.</li>
+                <li>In the chart: scroll to zoom, drag to pan, click a manager to collapse/expand their team.</li>
+                <li>Use <span className="font-semibold">Download image</span> (top-right) to export a PNG for slides.</li>
+              </ul>
+              <p className="mt-2 text-[11px] text-gray-500">
+                Privacy: no data is uploaded — everything stays local in your browser.
+              </p>
+            </div>
+
             {/* Quick Generator Section */}
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <div className="flex items-center gap-2 mb-4">
