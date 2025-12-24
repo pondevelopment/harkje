@@ -261,6 +261,11 @@ const buildFlatNodesFromCsv = (csvText: string): FlatNode[] => {
 };
 
 export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentData }) => {
+  const buildSha = (import.meta as any)?.env?.VITE_BUILD_SHA as string | undefined;
+  const buildTimeRaw = (import.meta as any)?.env?.VITE_BUILD_TIME as string | undefined;
+  const buildShaShort = buildSha ? String(buildSha).slice(0, 7) : null;
+  const buildTime = buildTimeRaw ? new Date(buildTimeRaw).toISOString().replace('.000Z', 'Z') : null;
+
   const [activeTab, setActiveTab] = useState<'ai' | 'json' | 'csv'>('ai');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -578,6 +583,14 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
 
       <div className="p-4 border-t border-gray-200 bg-gray-50 text-center">
         <p className="text-xs text-gray-400">Powered by random generation & D3.js</p>
+        <p className="text-[10px] text-gray-400 mt-1">
+          {buildShaShort && buildTime
+            ? <>Deployed: {buildTime} • {buildShaShort}</>
+            : buildShaShort
+              ? <>Deployed: {buildShaShort}</>
+              : <>Deployed: dev</>
+          }
+        </p>
       </div>
     </div>
   );

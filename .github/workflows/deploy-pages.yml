@@ -33,7 +33,10 @@ jobs:
       # GitHub Pages for a project site is served from https://<user>.github.io/<repo>/
       # Vite needs the correct base path so built asset URLs resolve.
       - name: Build
-        run: npm run build -- --base=/${{ github.event.repository.name }}/
+        run: |
+          VITE_BUILD_SHA='${{ github.sha }}' \
+          VITE_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+          npm run build -- --base=/${{ github.event.repository.name }}/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
