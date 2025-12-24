@@ -1,0 +1,5 @@
+{
+  "name": "OrgaGenius",
+  "description": "An AI-powered organizational chart generator. visualization tool that creates balanced organograms from text descriptions or manual input.",
+  "requestFramePermissions": []
+}
