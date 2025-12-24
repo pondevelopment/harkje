@@ -224,14 +224,14 @@ const AppInner: React.FC = () => {
                 <div className="flex items-center gap-2">
                     <input 
                         type="range" 
-                        min="0.5" 
-                        max="2" 
-                        step="0.1" 
+                      min="0.25" 
+                      max="4" 
+                      step="0.05" 
                         value={targetAspectRatio}
                         onChange={(e) => setTargetAspectRatio(parseFloat(e.target.value))}
                         className="w-full h-2 bg-indigo-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                     />
-                    <span className="text-xs w-6 text-right" style={{ color: 'var(--ui-muted)' }}>{targetAspectRatio}</span>
+                    <span className="text-xs w-8 text-right" style={{ color: 'var(--ui-muted)' }}>{targetAspectRatio.toFixed(2)}</span>
                 </div>
             </div>
 
