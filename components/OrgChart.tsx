@@ -66,7 +66,7 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
       try {
         clone.querySelectorAll('[data-export-exclude="true"]').forEach((el) => el.remove());
 
-        const clonedSvg = clone.querySelector('svg');
+        const clonedSvg = clone.querySelector('svg[data-chart-svg="true"]') as SVGSVGElement | null;
         const clonedG = clonedSvg?.querySelector('g');
 
         if (!clonedSvg || !clonedG) {
@@ -78,6 +78,10 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
         clonedSvg.setAttribute('width', String(exportWidth));
         clonedSvg.setAttribute('height', String(exportHeight));
         clonedG.setAttribute('transform', `translate(${padding - minX},${padding - minY})`);
+
+        // Give the browser a moment to layout/paint the cloned SVG + foreignObject HTML.
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
         // 1. Warmup run
         try {
@@ -572,7 +576,9 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" 
            style={{ backgroundImage: 'radial-gradient(#4f46e5 1px, transparent 1px)', backgroundSize: '16px 16px' }}>
       </div>
-      <svg ref={svgRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
+      <svg data-chart-svg="true" ref={svgRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
+      
+      
       
       <div data-export-exclude="true" className="absolute bottom-4 right-4 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-slate-100 text-[10px] text-slate-400 pointer-events-none select-none flex items-center gap-2">
          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
