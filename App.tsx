@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { OrgChart, OrgChartRef } from './components/OrgChart';
 import { InputPanel } from './components/InputPanel';
 import { INITIAL_DATA } from './constants';
@@ -17,8 +17,11 @@ const App: React.FC = () => {
   const MIN_CHART_WIDTH = 320;
   const [sidebarWidth, setSidebarWidth] = useState<number>(DEFAULT_SIDEBAR_WIDTH);
   const isResizingRef = useRef(false);
+  const suppressSidebarToggleClickRef = useRef(false);
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(0);
+  const onResizeMoveRef = useRef<((e: PointerEvent) => void) | null>(null);
+  const onResizeEndRef = useRef<((e: PointerEvent) => void) | null>(null);
 
   const clampSidebarWidth = (width: number) => {
     const viewportMax = typeof window !== 'undefined'
@@ -27,32 +30,62 @@ const App: React.FC = () => {
     return Math.max(MIN_SIDEBAR_WIDTH, Math.min(width, Math.min(MAX_SIDEBAR_WIDTH, viewportMax)));
   };
 
+  const cleanupResizeListeners = () => {
+    if (onResizeMoveRef.current) {
+      window.removeEventListener('pointermove', onResizeMoveRef.current);
+      onResizeMoveRef.current = null;
+    }
+    if (onResizeEndRef.current) {
+      window.removeEventListener('pointerup', onResizeEndRef.current);
+      window.removeEventListener('pointercancel', onResizeEndRef.current);
+      onResizeEndRef.current = null;
+    }
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  };
+
+  useEffect(() => {
+    return () => {
+      cleanupResizeListeners();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleResizeStart = (e: React.PointerEvent<HTMLDivElement>) => {
     // Only allow resizing on desktop layouts.
     if (typeof window !== 'undefined' && window.innerWidth < 768) return;
+
+    cleanupResizeListeners();
     isResizingRef.current = true;
+    suppressSidebarToggleClickRef.current = false;
     resizeStartXRef.current = e.clientX;
     resizeStartWidthRef.current = sidebarWidth;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    e.preventDefault();
-  };
 
-  const handleResizeMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isResizingRef.current) return;
-    const dx = e.clientX - resizeStartXRef.current;
-    setSidebarWidth(clampSidebarWidth(resizeStartWidthRef.current + dx));
-    e.preventDefault();
-  };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
 
-  const handleResizeEnd = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isResizingRef.current) return;
-    isResizingRef.current = false;
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      // no-op
-    }
-    e.preventDefault();
+    const onMove = (ev: PointerEvent) => {
+      if (!isResizingRef.current) return;
+      const dx = ev.clientX - resizeStartXRef.current;
+      if (Math.abs(dx) > 3) suppressSidebarToggleClickRef.current = true;
+      setSidebarWidth(clampSidebarWidth(resizeStartWidthRef.current + dx));
+      ev.preventDefault();
+    };
+
+    const onEnd = (ev: PointerEvent) => {
+      if (!isResizingRef.current) return;
+      isResizingRef.current = false;
+      cleanupResizeListeners();
+      ev.preventDefault();
+    };
+
+    onResizeMoveRef.current = onMove;
+    onResizeEndRef.current = onEnd;
+    window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('pointerup', onEnd, { passive: false });
+    window.addEventListener('pointercancel', onEnd, { passive: false });
+
+    // Avoid preventing default here so clicks still work when the user doesn't drag.
   };
 
   const handleDownload = () => {
@@ -83,20 +116,26 @@ const App: React.FC = () => {
 
         {/* Drag handle to resize sidebar (desktop) */}
         <div
-          className="hidden md:block absolute inset-y-0 -right-1 w-2 cursor-col-resize touch-none z-40"
+          className="hidden md:block absolute inset-y-0 -right-2 w-4 cursor-col-resize touch-none z-40 pointer-events-auto hover:bg-indigo-100/40"
           onPointerDown={handleResizeStart}
-          onPointerMove={handleResizeMove}
-          onPointerUp={handleResizeEnd}
-          onPointerCancel={handleResizeEnd}
           title="Drag to resize sidebar"
           aria-label="Resize sidebar"
           role="separator"
           aria-orientation="vertical"
-        />
+        >
+          <div className="absolute inset-y-0 right-1 w-px bg-slate-300/70" />
+        </div>
         
         {/* Toggle Button for Desktop - Absolute on the edge of sidebar */}
         <button
-           onClick={() => setIsSidebarOpen(false)}
+           onPointerDown={(e) => handleResizeStart(e as unknown as React.PointerEvent<HTMLDivElement>)}
+           onClick={() => {
+             if (suppressSidebarToggleClickRef.current) {
+               suppressSidebarToggleClickRef.current = false;
+               return;
+             }
+             setIsSidebarOpen(false);
+           }}
            className="hidden md:flex absolute top-1/2 -right-3 w-6 h-12 bg-white items-center justify-center rounded-r-lg shadow-md text-gray-400 hover:text-indigo-600 cursor-pointer border-y border-r border-gray-100 z-50"
            title="Collapse Sidebar"
         >
