@@ -17,6 +17,19 @@ It includes:
 
 ## Themes
 
+Harkje has two separate theme systems:
+
+- **Site theme** (Light / Dark): affects the app UI (sidebar + toolbar).
+- **Chart theme** (Light / Dark / High Contrast): affects the org chart renderer and PNG export.
+
+### Site theme
+
+- UI theme tokens are defined as **CSS variables** in `index.html` (the `--ui-*` tokens).
+- The active site theme is applied by setting `data-site-theme="..."` on the `<html>` element.
+- The selection is persisted in `localStorage` under `harkje.siteTheme`.
+
+### Chart theme
+
 Harkje supports a small built-in **chart theme** system (Light / Dark / High Contrast) that works with the org chart renderer and PNG export.
 
 - Theme tokens are defined as **CSS variables** in `index.html` (using `[data-chart-theme="..."]`).
@@ -125,7 +138,8 @@ The download button in `App.tsx` calls this method.
 
 The floating toolbar in the top-right provides:
 
-- Theme selector (Light / Dark / High Contrast)
+- Site theme selector (Light / Dark)
+- Chart theme selector (Light / Dark / High Contrast)
 - Target aspect ratio slider: influences how the layout engine wraps/grids large child groups
 - Download image: exports a PNG
 
