@@ -38,40 +38,25 @@ There are two representations of the org:
 - `flattenTree()` converts `OrgNode` → `FlatNode[]` for the editor.
 - `buildTree()` converts `FlatNode[]` → `OrgNode` for rendering.
 
-## CSV input (non-technical friendly)
 
-The sidebar also supports a CSV-style input for quick editing.
+## List editor input (JSON)
 
-Format:
+The sidebar includes a **List Editor** that edits the org as a JSON array of `FlatNode` objects.
 
-- One person per line
-- Required columns: `user`, `manager`
-  - Leave `manager` empty (or set it to `null`) for the single root
-- Optional columns (if present): `title`, `department`, `details`
-
-Empty values:
-
-- `user` must not be empty.
-- `manager` may be empty only for the single root row.
-- `title`, `department`, and `details` may be empty.
-
-Leaf employees (people who manage nobody):
-
-- Just include them as normal rows with a `manager` value.
-- They do not need any special marker — they simply won’t appear as a manager for anyone else.
+- Use `"parentId": "null"` (string) or `"parentId": null` for the root.
+- Keep `id` values as strings.
 
 Example:
 
-```csv
-user,manager,title,department,details
-Jane Doe,,CEO,Executive,"Leads the company"
-John Smith,Jane Doe,Engineering Manager,Engineering,"Runs the platform team"
+```json
+[
+  {"id":"1","parentId":"null","name":"Jane Doe","title":"CEO","department":"Executive","details":"Leads the company"},
+  {"id":"2","parentId":"1","name":"John Smith","title":"Engineering Manager","department":"Engineering","details":"Runs the platform team"}
+]
 ```
 
-Notes:
+Note: if the input implies multiple roots (e.g. missing/unknown managers), the app will pick a best-effort root (heuristic prefers titles like "CEO").
 
-- Managers must exist as users somewhere in the CSV.
-- User names must be unique (or you can add an explicit `id` column).
 
 ## Running locally
 
@@ -115,6 +100,14 @@ The chart component exposes an imperative ref API:
 
 The download button in `App.tsx` calls this method.
 
+## Chart controls
+
+The floating toolbar in the top-right provides:
+
+- Layout direction: vertical (top-down) or horizontal (left-right)
+- Target aspect ratio slider: influences how the layout engine wraps/grids large child groups
+- Export button: downloads a PNG
+
 ## Deploy to GitHub Pages
 
 This repo includes a GitHub Actions workflow that builds and deploys `dist/` to GitHub Pages:
@@ -138,4 +131,3 @@ Common extension points:
 - Node card UI: update the HTML template in `components/OrgChart.tsx`.
 - Layout behavior: update `computeBalancedLayout()` in `components/OrgChart.tsx`.
 - Input fields: extend `FlatNode`/`OrgNode` in `types.ts`, then update `flattenTree()` + `buildTree()`.
-
