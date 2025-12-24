@@ -179,7 +179,6 @@ export const generateOrgStructure = async (description: string): Promise<FlatNod
   return generateFlatOrg(rng, approxCount, theme);
 };
 
-export const generateRandomOrgStructure = async (size: OrgSize, theme: string): Promise<FlatNode[]> => {
 export const generateRandomOrgStructure = async (
   size: OrgSize,
   theme: string,
