@@ -12,6 +12,50 @@ const App: React.FC = () => {
   const [targetAspectRatio, setTargetAspectRatio] = useState<number>(1); // Default 1:1
   const chartRef = useRef<OrgChartRef>(null);
 
+  const DEFAULT_SIDEBAR_WIDTH = (typeof window !== 'undefined' && window.innerWidth >= 1024) ? 384 : 320; // ~w-96 or w-80
+  const MIN_SIDEBAR_WIDTH = 280;
+  const MAX_SIDEBAR_WIDTH = 1200;
+  const MIN_CHART_WIDTH = 320;
+  const [sidebarWidth, setSidebarWidth] = useState<number>(DEFAULT_SIDEBAR_WIDTH);
+  const isResizingRef = useRef(false);
+  const resizeStartXRef = useRef(0);
+  const resizeStartWidthRef = useRef(0);
+
+  const clampSidebarWidth = (width: number) => {
+    const viewportMax = typeof window !== 'undefined'
+      ? Math.max(MIN_SIDEBAR_WIDTH, window.innerWidth - MIN_CHART_WIDTH)
+      : MAX_SIDEBAR_WIDTH;
+    return Math.max(MIN_SIDEBAR_WIDTH, Math.min(width, Math.min(MAX_SIDEBAR_WIDTH, viewportMax)));
+  };
+
+  const handleResizeStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Only allow resizing on desktop layouts.
+    if (typeof window !== 'undefined' && window.innerWidth < 768) return;
+    isResizingRef.current = true;
+    resizeStartXRef.current = e.clientX;
+    resizeStartWidthRef.current = sidebarWidth;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  };
+
+  const handleResizeMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isResizingRef.current) return;
+    const dx = e.clientX - resizeStartXRef.current;
+    setSidebarWidth(clampSidebarWidth(resizeStartWidthRef.current + dx));
+    e.preventDefault();
+  };
+
+  const handleResizeEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isResizingRef.current) return;
+    isResizingRef.current = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // no-op
+    }
+    e.preventDefault();
+  };
+
   const handleDownload = () => {
     if (chartRef.current) {
       chartRef.current.exportImage();
@@ -33,9 +77,23 @@ const App: React.FC = () => {
       <div 
         className={`fixed md:relative inset-y-0 left-0 transform ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:translate-x-0 transition-transform duration-300 ease-in-out z-20 h-full shadow-2xl md:shadow-none w-80 lg:w-96 flex-shrink-0`}
+        } md:translate-x-0 transition-transform duration-300 ease-in-out z-20 h-full shadow-2xl md:shadow-none flex-shrink-0`}
+        style={{ width: sidebarWidth }}
       >
         <InputPanel onDataUpdate={setData} currentData={data} />
+
+        {/* Drag handle to resize sidebar (desktop) */}
+        <div
+          className="hidden md:block absolute inset-y-0 -right-1 w-2 cursor-col-resize touch-none z-40"
+          onPointerDown={handleResizeStart}
+          onPointerMove={handleResizeMove}
+          onPointerUp={handleResizeEnd}
+          onPointerCancel={handleResizeEnd}
+          title="Drag to resize sidebar"
+          aria-label="Resize sidebar"
+          role="separator"
+          aria-orientation="vertical"
+        />
         
         {/* Toggle Button for Desktop - Absolute on the edge of sidebar */}
         <button

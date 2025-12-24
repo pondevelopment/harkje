@@ -38,6 +38,29 @@ There are two representations of the org:
 - `flattenTree()` converts `OrgNode` → `FlatNode[]` for the editor.
 - `buildTree()` converts `FlatNode[]` → `OrgNode` for rendering.
 
+## CSV input (non-technical friendly)
+
+The sidebar also supports a CSV-style input for quick editing.
+
+Format:
+
+- One person per line
+- Columns: `user, manager, title, department, details`
+- Leave `manager` empty (or set it to `null`) for the single root
+
+Example:
+
+```csv
+user,manager,title,department,details
+Jane Doe,,CEO,Executive,"Leads the company"
+John Smith,Jane Doe,Engineering Manager,Engineering,"Runs the platform team"
+```
+
+Notes:
+
+- Managers must exist as users somewhere in the CSV.
+- User names must be unique (or you can add an explicit `id` column).
+
 ## Running locally
 
 Prerequisites:
