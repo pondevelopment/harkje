@@ -1,5 +1,5 @@
 {
-  "name": "OrgaGenius",
-  "description": "An AI-powered organizational chart generator. visualization tool that creates balanced organograms from text descriptions or manual input.",
+  "name": "Harkje",
+  "description": "An organizational chart generator and visualization tool that creates balanced organograms from seeded text generation or manual input.",
   "requestFramePermissions": []
 }

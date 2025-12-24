@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { generateOrgStructure, generateRandomOrgStructure } from '../services/geminiService';
+import { generateRandomOrgStructure } from '../services/geminiService';
 import { FlatNode, OrgNode } from '../types';
-import { Loader2, Wand2, FileJson, Layers, Sparkles, Dices } from 'lucide-react';
+import { Loader2, Wand2, FileJson, Layers, Dices } from 'lucide-react';
 
 interface InputPanelProps {
   onDataUpdate: (newRoot: OrgNode) => void;
@@ -27,7 +27,6 @@ const flattenTree = (node: OrgNode, parentId: string | null = null, result: Flat
 
 export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentData }) => {
   const [activeTab, setActiveTab] = useState<'ai' | 'json'>('ai');
-  const [prompt, setPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -124,11 +123,6 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
     }
   };
 
-  const handleGenerateFromDescription = () => {
-    if (!prompt.trim()) return;
-    handleDataGeneration(generateOrgStructure(prompt));
-  };
-
   const handleQuickGenerate = () => {
       if (!quickTheme.trim()) return;
       handleDataGeneration(generateRandomOrgStructure(quickSize, quickTheme));
@@ -157,7 +151,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
       <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-indigo-600 to-violet-600 text-white">
         <h1 className="text-xl font-bold flex items-center gap-2">
           <Layers className="w-6 h-6" />
-          OrgaGenius
+          Harkje
         </h1>
         <p className="text-indigo-100 text-sm mt-1 opacity-90">
           Visualize your team structure effortlessly.
@@ -174,7 +168,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
           }`}
         >
           <Wand2 className="w-4 h-4" />
-          AI Generator
+          Generator
         </button>
         <button
           onClick={() => setActiveTab('json')}
@@ -192,45 +186,13 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
       <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
         {activeTab === 'ai' ? (
           <div className="space-y-8">
-            {/* Custom Description Section */}
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                 <div className="p-1.5 bg-indigo-100 rounded-md text-indigo-600">
-                    <Sparkles size={16} />
-                 </div>
-                 <h2 className="text-sm font-bold text-gray-800">Custom Description</h2>
-              </div>
-              <p className="text-xs text-gray-500 mb-3">
-                Describe your organization in plain text.
-              </p>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                className="w-full h-32 p-4 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none shadow-sm mb-3"
-                placeholder="e.g. Sarah is CEO. She manages Tom (Sales) and Jerry (Tech)..."
-              />
-              <button
-                onClick={handleGenerateFromDescription}
-                disabled={isLoading || !prompt.trim()}
-                className="w-full py-2.5 px-4 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-medium rounded-xl transition-all flex items-center justify-center gap-2 text-sm shadow-sm"
-              >
-                 Generate from Text
-              </button>
-            </div>
-
-            <div className="relative flex items-center py-2">
-                <div className="flex-grow border-t border-gray-200"></div>
-                <span className="flex-shrink-0 mx-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Or Try Auto-Gen</span>
-                <div className="flex-grow border-t border-gray-200"></div>
-            </div>
-
             {/* Quick Generator Section */}
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <div className="flex items-center gap-2 mb-4">
                  <div className="p-1.5 bg-violet-100 rounded-md text-violet-600">
                     <Dices size={16} />
                  </div>
-                 <h2 className="text-sm font-bold text-gray-800">Quick Test Generator</h2>
+                 <h2 className="text-sm font-bold text-gray-800">Generator</h2>
               </div>
               
               <div className="space-y-4">
@@ -316,7 +278,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
       </div>
 
       <div className="p-4 border-t border-gray-200 bg-gray-50 text-center">
-        <p className="text-xs text-gray-400">Powered by Gemini 3 Flash & D3.js</p>
+        <p className="text-xs text-gray-400">Powered by random generation & D3.js</p>
       </div>
     </div>
   );
