@@ -11,7 +11,11 @@ const AppInner: React.FC = () => {
   const { chartThemeId, setChartThemeId } = useChartTheme();
   const [data, setData] = useState<OrgNode>(INITIAL_DATA);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [targetAspectRatio, setTargetAspectRatio] = useState<number>(1); // Default 1:1
+  // Chart layout can be expensive to recompute; keep slider drag responsive by
+  // debouncing updates to the chart-applied value.
+  const [targetAspectRatio, setTargetAspectRatio] = useState<number>(1); // value applied to chart
+  const [targetAspectRatioUi, setTargetAspectRatioUi] = useState<number>(1); // value shown in slider
+  const ratioCommitTimeoutRef = useRef<number | null>(null);
   const chartRef = useRef<OrgChartRef>(null);
 
   const DEFAULT_SIDEBAR_WIDTH = (typeof window !== 'undefined' && window.innerWidth >= 1024) ? 384 : 320; // ~w-96 or w-80
@@ -95,6 +99,24 @@ const AppInner: React.FC = () => {
     if (chartRef.current) {
       chartRef.current.exportImage();
     }
+  };
+
+  const commitTargetAspectRatio = (value: number) => {
+    if (ratioCommitTimeoutRef.current !== null) {
+      window.clearTimeout(ratioCommitTimeoutRef.current);
+      ratioCommitTimeoutRef.current = null;
+    }
+    setTargetAspectRatio(value);
+  };
+
+  const scheduleTargetAspectRatioCommit = (value: number) => {
+    if (ratioCommitTimeoutRef.current !== null) {
+      window.clearTimeout(ratioCommitTimeoutRef.current);
+    }
+    ratioCommitTimeoutRef.current = window.setTimeout(() => {
+      ratioCommitTimeoutRef.current = null;
+      setTargetAspectRatio(value);
+    }, 120);
   };
 
   return (
@@ -227,11 +249,18 @@ const AppInner: React.FC = () => {
                       min="0.25" 
                       max="4" 
                       step="0.05" 
-                        value={targetAspectRatio}
-                        onChange={(e) => setTargetAspectRatio(parseFloat(e.target.value))}
+                      value={targetAspectRatioUi}
+                      onChange={(e) => {
+                        const next = parseFloat(e.target.value);
+                        setTargetAspectRatioUi(next);
+                        scheduleTargetAspectRatioCommit(next);
+                      }}
+                      onPointerUp={() => commitTargetAspectRatio(targetAspectRatioUi)}
+                      onPointerCancel={() => commitTargetAspectRatio(targetAspectRatioUi)}
+                      onBlur={() => commitTargetAspectRatio(targetAspectRatioUi)}
                         className="w-full h-2 bg-indigo-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                     />
-                    <span className="text-xs w-8 text-right" style={{ color: 'var(--ui-muted)' }}>{targetAspectRatio.toFixed(2)}</span>
+                    <span className="text-xs w-8 text-right" style={{ color: 'var(--ui-muted)' }}>{targetAspectRatioUi.toFixed(2)}</span>
                 </div>
             </div>
 
