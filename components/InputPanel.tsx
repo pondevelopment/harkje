@@ -462,6 +462,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
                 <li>Use <span className="font-semibold">Generator</span> to create a quick example org by size.</li>
                 <li>Use <span className="font-semibold">List Editor</span> (JSON) or <span className="font-semibold">CSV</span> to paste/edit your own org data.</li>
                 <li>In the chart: scroll to zoom, drag to pan, click a manager to collapse/expand their team.</li>
+                <li>Use <span className="font-semibold">Aspect Ratio</span> to influence how wide vs. tall the layout tries to be (lower = taller/narrower, higher = wider/flatter).</li>
                 <li>Use <span className="font-semibold">Download image</span> (top-right) to export a PNG for slides.</li>
               </ul>
               <p className="mt-2 text-[11px]" style={{ color: 'var(--ui-muted)' }}>
