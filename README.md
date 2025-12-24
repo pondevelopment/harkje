@@ -15,6 +15,21 @@ It includes:
 - `html-to-image` for exporting the chart as PNG
 - Tailwind via CDN (see `index.html`)
 
+## Themes
+
+Harkje supports a small built-in theme system (Light / Dark / High Contrast) that works with the chart renderer and PNG export.
+
+- Theme tokens are defined as **CSS variables** in `index.html` (using `html[data-theme="..."]`).
+- The active theme is applied by setting `document.documentElement.dataset.theme`.
+- The selection is persisted in `localStorage` under `harkje.theme`.
+
+Adding a new theme:
+
+1. Add a new `html[data-theme="yourThemeId"] { ... }` block in `index.html` with the same token names.
+2. Add the theme id + label to `THEMES` in `theme.tsx`.
+
+Note: for SVG link lines the app resolves `--chart-link` to a concrete color at runtime (more reliable for export).
+
 ## Project structure
 
 Key files:
@@ -98,15 +113,21 @@ The chart component exposes an imperative ref API:
 
 - `exportImage()`: exports the current chart viewport to a PNG using `html-to-image`.
 
+Export details:
+
+- The exported PNG is **cropped to the chart bounds**.
+- The PNG background is **transparent** (good for presentations).
+- The export reflects the current theme for node cards and link lines.
+
 The download button in `App.tsx` calls this method.
 
 ## Chart controls
 
 The floating toolbar in the top-right provides:
 
-- Layout direction: vertical (top-down) or horizontal (left-right)
+- Theme selector (Light / Dark / High Contrast)
 - Target aspect ratio slider: influences how the layout engine wraps/grids large child groups
-- Export button: downloads a PNG
+- Download image: exports a PNG
 
 ## Deploy to GitHub Pages
 

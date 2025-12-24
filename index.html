@@ -7,9 +7,117 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous">
     <style>
+      :root {
+        /* App surfaces */
+        --app-bg: #f3f4f6;
+        --surface: #ffffff;
+        --surface-2: #f8fafc;
+        --border: #e5e7eb;
+        --text: #0f172a;
+        --muted: #64748b;
+
+        /* Accent */
+        --accent: #4f46e5;
+        --accent-2: #7c3aed;
+        --accent-contrast: #ffffff;
+
+        /* Chart */
+        --chart-bg: rgba(248, 250, 252, 0.5);
+        --chart-grid-dot: rgba(79, 70, 229, 1);
+        --chart-link: #cbd5e1;
+
+        /* Node card */
+        --card-bg: #ffffff;
+        --card-border: #e2e8f0;
+        --card-border-manager: #c7d2fe;
+        --card-name: #0f172a;
+        --card-title: #4f46e5;
+        --card-dept: #64748b;
+        --badge-bg: #eef2ff;
+        --badge-fg: #4f46e5;
+        --badge-border: #c7d2fe;
+        --badge-bg-collapsed: #4f46e5;
+        --badge-fg-collapsed: #ffffff;
+        --badge-border-collapsed: #4f46e5;
+
+        /* Overlay pills */
+        --overlay-bg: rgba(255, 255, 255, 0.8);
+        --overlay-text: #64748b;
+        --overlay-border: rgba(226, 232, 240, 1);
+      }
+
+      html[data-theme="dark"] {
+        --app-bg: #0b1220;
+        --surface: #0f172a;
+        --surface-2: #111c33;
+        --border: #233055;
+        --text: #e5e7eb;
+        --muted: #94a3b8;
+
+        --accent: #818cf8;
+        --accent-2: #c4b5fd;
+        --accent-contrast: #0b1220;
+
+        --chart-bg: rgba(2, 6, 23, 0.35);
+        --chart-grid-dot: rgba(129, 140, 248, 1);
+        --chart-link: #334155;
+
+        --card-bg: #0b1220;
+        --card-border: #233055;
+        --card-border-manager: #6366f1;
+        --card-name: #e5e7eb;
+        --card-title: #a5b4fc;
+        --card-dept: #94a3b8;
+        --badge-bg: rgba(99, 102, 241, 0.18);
+        --badge-fg: #c7d2fe;
+        --badge-border: rgba(99, 102, 241, 0.45);
+        --badge-bg-collapsed: #818cf8;
+        --badge-fg-collapsed: #0b1220;
+        --badge-border-collapsed: #818cf8;
+
+        --overlay-bg: rgba(15, 23, 42, 0.8);
+        --overlay-text: #94a3b8;
+        --overlay-border: rgba(35, 48, 85, 1);
+      }
+
+      html[data-theme="highContrast"] {
+        --app-bg: #000000;
+        --surface: #000000;
+        --surface-2: #0a0a0a;
+        --border: #ffffff;
+        --text: #ffffff;
+        --muted: #e5e7eb;
+
+        --accent: #ffffff;
+        --accent-2: #ffffff;
+        --accent-contrast: #000000;
+
+        --chart-bg: rgba(0, 0, 0, 0.0);
+        --chart-grid-dot: rgba(255, 255, 255, 1);
+        --chart-link: #ffffff;
+
+        --card-bg: #000000;
+        --card-border: #ffffff;
+        --card-border-manager: #ffffff;
+        --card-name: #ffffff;
+        --card-title: #ffffff;
+        --card-dept: #ffffff;
+        --badge-bg: #ffffff;
+        --badge-fg: #000000;
+        --badge-border: #ffffff;
+        --badge-bg-collapsed: #ffffff;
+        --badge-fg-collapsed: #000000;
+        --badge-border-collapsed: #ffffff;
+
+        --overlay-bg: rgba(0, 0, 0, 0.9);
+        --overlay-text: #ffffff;
+        --overlay-border: rgba(255, 255, 255, 1);
+      }
+
       body {
         font-family: 'Inter', sans-serif;
-        background-color: #f3f4f6;
+        background-color: var(--app-bg);
+        color: var(--text);
         overflow: hidden; /* App handles scrolling */
       }
       /* Custom scrollbar for sidebar */
@@ -21,11 +129,11 @@
         background: transparent;
       }
       ::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
+        background: var(--chart-link);
         border-radius: 4px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
+        background: var(--muted);
       }
     </style>
   <script type="importmap">

@@ -275,7 +275,6 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
   const [csvInput, setCsvInput] = useState(() => flatNodesToCsv(flattenTree(currentData)));
 
   // Quick Gen State
-  const [quickTheme, setQuickTheme] = useState('Tech Startup');
   const [quickSize, setQuickSize] = useState<'small' | 'medium' | 'large'>('medium');
   const quickRunIdRef = useRef(0);
 
@@ -368,9 +367,8 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
   };
 
   const handleQuickGenerate = () => {
-      if (!quickTheme.trim()) return;
       quickRunIdRef.current += 1;
-      handleDataGeneration(generateRandomOrgStructure(quickSize, quickTheme, quickRunIdRef.current));
+      handleDataGeneration(generateRandomOrgStructure(quickSize, 'Default', quickRunIdRef.current));
   };
 
   const handleJsonUpdate = () => {
@@ -407,47 +405,47 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
   };
 
   return (
-    <div className="flex flex-col h-full bg-white border-r border-gray-200 w-full shadow-xl z-20">
-      <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-indigo-600 to-violet-600 text-white">
+    <div
+      className="flex flex-col h-full w-full shadow-xl z-20"
+      style={{ backgroundColor: 'var(--surface)', borderRight: '1px solid var(--border)', color: 'var(--text)' }}
+    >
+      <div className="p-6" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--accent)', color: 'var(--accent-contrast)' }}>
         <h1 className="text-xl font-bold flex items-center gap-2">
           <Layers className="w-6 h-6" />
           Harkje
         </h1>
-        <p className="text-indigo-100 text-sm mt-1 opacity-90">
+        <p className="text-sm mt-1 opacity-90" style={{ color: 'var(--accent-contrast)' }}>
           Visualize your team structure effortlessly.
         </p>
       </div>
 
-      <div className="flex border-b border-gray-200">
+      <div className="flex" style={{ borderBottom: '1px solid var(--border)' }}>
         <button
           onClick={() => setActiveTab('ai')}
-          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
-            activeTab === 'ai'
-              ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-          }`}
+          className="flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+          style={activeTab === 'ai'
+            ? { color: 'var(--accent)', borderBottom: '2px solid var(--accent)', backgroundColor: 'var(--surface-2)' }
+            : { color: 'var(--muted)' }}
         >
           <Wand2 className="w-4 h-4" />
           Generator
         </button>
         <button
           onClick={() => setActiveTab('json')}
-          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
-            activeTab === 'json'
-              ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-          }`}
+          className="flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+          style={activeTab === 'json'
+            ? { color: 'var(--accent)', borderBottom: '2px solid var(--accent)', backgroundColor: 'var(--surface-2)' }
+            : { color: 'var(--muted)' }}
         >
           <FileJson className="w-4 h-4" />
           List Editor
         </button>
         <button
           onClick={() => setActiveTab('csv')}
-          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
-            activeTab === 'csv'
-              ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-          }`}
+          className="flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+          style={activeTab === 'csv'
+            ? { color: 'var(--accent)', borderBottom: '2px solid var(--accent)', backgroundColor: 'var(--surface-2)' }
+            : { color: 'var(--muted)' }}
         >
           <Sheet className="w-4 h-4" />
           CSV
@@ -458,40 +456,29 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
         {activeTab === 'ai' ? (
           <div className="space-y-8">
             {/* How-to */}
-            <div className="bg-indigo-50/60 p-4 rounded-xl border border-indigo-100">
-              <h2 className="text-sm font-bold text-gray-800">How to use Harkje</h2>
-              <ul className="mt-2 space-y-1 text-xs text-gray-600 list-disc pl-4">
-                <li>Use <span className="font-semibold">Generator</span> to create a quick example org from a theme + size.</li>
+            <div className="p-4 rounded-xl" style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+              <h2 className="text-sm font-bold" style={{ color: 'var(--text)' }}>How to use Harkje</h2>
+              <ul className="mt-2 space-y-1 text-xs list-disc pl-4" style={{ color: 'var(--muted)' }}>
+                <li>Use <span className="font-semibold">Generator</span> to create a quick example org by size.</li>
                 <li>Use <span className="font-semibold">List Editor</span> (JSON) or <span className="font-semibold">CSV</span> to paste/edit your own org data.</li>
                 <li>In the chart: scroll to zoom, drag to pan, click a manager to collapse/expand their team.</li>
                 <li>Use <span className="font-semibold">Download image</span> (top-right) to export a PNG for slides.</li>
               </ul>
-              <p className="mt-2 text-[11px] text-gray-500">
+              <p className="mt-2 text-[11px]" style={{ color: 'var(--muted)' }}>
                 Privacy: no data is uploaded — everything stays local in your browser.
               </p>
             </div>
 
             {/* Quick Generator Section */}
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <div className="p-4 rounded-xl" style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}>
               <div className="flex items-center gap-2 mb-4">
                  <div className="p-1.5 bg-violet-100 rounded-md text-violet-600">
                     <Dices size={16} />
                  </div>
-                 <h2 className="text-sm font-bold text-gray-800">Generator</h2>
+                  <h2 className="text-sm font-bold" style={{ color: 'var(--text)' }}>Generator</h2>
               </div>
               
               <div className="space-y-4">
-                  <div>
-                      <label className="block text-xs font-semibold text-gray-500 mb-1.5">Theme / Industry</label>
-                      <input 
-                        type="text" 
-                        value={quickTheme}
-                        onChange={(e) => setQuickTheme(e.target.value)}
-                        className="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
-                        placeholder="e.g. Pirate Ship, Mars Colony..."
-                      />
-                  </div>
-
                   <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1.5">Organization Size</label>
                       <div className="grid grid-cols-3 gap-2">
@@ -518,7 +505,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
 
                   <button
                     onClick={handleQuickGenerate}
-                    disabled={isLoading || !quickTheme.trim()}
+                    disabled={isLoading}
                     className="w-full py-3 px-4 bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white font-medium rounded-xl shadow-md transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
                   >
                     {isLoading ? (

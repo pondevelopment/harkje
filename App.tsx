@@ -4,8 +4,10 @@ import { InputPanel } from './components/InputPanel';
 import { INITIAL_DATA } from './constants';
 import { OrgNode, LayoutDirection } from './types';
 import { Menu, X, Ratio, Download } from 'lucide-react';
+import { ThemeProvider, THEMES, ThemeId, useTheme } from './theme';
 
-const App: React.FC = () => {
+const AppInner: React.FC = () => {
+  const { themeId, setThemeId } = useTheme();
   const [data, setData] = useState<OrgNode>(INITIAL_DATA);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [targetAspectRatio, setTargetAspectRatio] = useState<number>(1); // Default 1:1
@@ -95,12 +97,13 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-gray-100 overflow-hidden relative">
+    <div className="flex h-screen w-screen overflow-hidden relative" style={{ backgroundColor: 'var(--app-bg)', color: 'var(--text)' }}>
       
       {/* Mobile Sidebar Toggle - visible only on small screens or when closed */}
       <button 
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        className="absolute top-4 left-4 z-30 p-2 bg-white rounded-lg shadow-md text-gray-600 hover:text-indigo-600 md:hidden"
+        className="absolute top-4 left-4 z-30 p-2 rounded-lg shadow-md md:hidden"
+        style={{ backgroundColor: 'var(--overlay-bg)', border: '1px solid var(--overlay-border)', color: 'var(--text)' }}
       >
         {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
       </button>
@@ -136,7 +139,8 @@ const App: React.FC = () => {
              }
              setIsSidebarOpen(false);
            }}
-           className="hidden md:flex absolute top-1/2 -right-3 w-6 h-12 bg-white items-center justify-center rounded-r-lg shadow-md text-gray-400 hover:text-indigo-600 cursor-pointer border-y border-r border-gray-100 z-50"
+           className="hidden md:flex absolute top-1/2 -right-3 w-6 h-12 items-center justify-center rounded-r-lg shadow-md cursor-pointer z-50"
+           style={{ backgroundColor: 'var(--surface)', borderTop: '1px solid var(--border)', borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)', color: 'var(--muted)' }}
            title="Collapse Sidebar"
         >
              <div className="w-1 h-4 bg-gray-300 rounded-full" />
@@ -147,7 +151,8 @@ const App: React.FC = () => {
       {!isSidebarOpen && (
          <button
          onClick={() => setIsSidebarOpen(true)}
-         className="hidden md:flex absolute top-1/2 left-0 w-6 h-12 bg-white items-center justify-center rounded-r-lg shadow-md text-gray-400 hover:text-indigo-600 cursor-pointer border-y border-r border-gray-100 z-50"
+        className="hidden md:flex absolute top-1/2 left-0 w-6 h-12 items-center justify-center rounded-r-lg shadow-md cursor-pointer z-50"
+        style={{ backgroundColor: 'var(--surface)', borderTop: '1px solid var(--border)', borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)', color: 'var(--muted)' }}
          title="Expand Sidebar"
       >
            <div className="w-1 h-4 bg-gray-300 rounded-full" />
@@ -158,10 +163,35 @@ const App: React.FC = () => {
       <div className="flex-1 flex flex-col h-full relative">
         {/* Toolbar */}
         <div className="absolute top-6 right-6 z-10 flex gap-4 items-start">
+
+            {/* Theme */}
+            <div className="backdrop-blur rounded-lg shadow-sm px-3 py-2 flex items-center gap-2" style={{ backgroundColor: 'var(--overlay-bg)', border: '1px solid var(--overlay-border)', color: 'var(--text)' }}>
+              <label className="text-xs font-semibold" style={{ color: 'var(--muted)' }} htmlFor="theme">
+                Theme
+              </label>
+              <select
+                id="theme"
+                value={themeId}
+                onChange={(e) => setThemeId(e.target.value as ThemeId)}
+                className="text-sm outline-none rounded-md px-2 py-1"
+                style={{
+                  color: 'var(--text)',
+                  backgroundColor: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                }}
+                title="Theme"
+              >
+                {THEMES.map(t => (
+                  <option key={t.id} value={t.id} style={{ backgroundColor: 'var(--surface)', color: 'var(--text)' }}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             
             {/* Aspect Ratio Control */}
-            <div className="bg-white/90 backdrop-blur rounded-lg shadow-sm border border-gray-200 p-2 flex flex-col gap-1 w-32">
-                <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 mb-1">
+            <div className="backdrop-blur rounded-lg shadow-sm p-2 flex flex-col gap-1 w-32" style={{ backgroundColor: 'var(--overlay-bg)', border: '1px solid var(--overlay-border)', color: 'var(--text)' }}>
+                <div className="flex items-center gap-2 text-xs font-semibold mb-1" style={{ color: 'var(--muted)' }}>
                     <Ratio size={14} />
                     <span>Aspect Ratio</span>
                 </div>
@@ -175,14 +205,15 @@ const App: React.FC = () => {
                         onChange={(e) => setTargetAspectRatio(parseFloat(e.target.value))}
                         className="w-full h-2 bg-indigo-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                     />
-                    <span className="text-xs text-gray-600 w-6 text-right">{targetAspectRatio}</span>
+                    <span className="text-xs w-6 text-right" style={{ color: 'var(--muted)' }}>{targetAspectRatio}</span>
                 </div>
             </div>
 
             {/* Download */}
             <button 
               onClick={handleDownload}
-              className="bg-white/90 backdrop-blur rounded-lg shadow-sm border border-gray-200 px-3 py-2 flex items-center gap-2 text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-all"
+              className="backdrop-blur rounded-lg shadow-sm px-3 py-2 flex items-center gap-2 transition-all"
+              style={{ backgroundColor: 'var(--overlay-bg)', border: '1px solid var(--overlay-border)', color: 'var(--text)' }}
               title="Download image (PNG)"
             >
               <Download size={18} />
@@ -191,16 +222,25 @@ const App: React.FC = () => {
         </div>
 
         {/* Chart View */}
-        <div className="flex-1 overflow-hidden bg-slate-50">
+        <div className="flex-1 overflow-hidden" style={{ backgroundColor: 'var(--app-bg)' }}>
           <OrgChart 
             ref={chartRef}
             data={data} 
             direction={LayoutDirection.TopDown} 
             targetAspectRatio={targetAspectRatio} 
+            themeId={themeId}
           />
         </div>
       </div>
     </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <ThemeProvider>
+      <AppInner />
+    </ThemeProvider>
   );
 };
 

@@ -2,11 +2,13 @@ import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } f
 import * as d3 from 'd3';
 import { toPng } from 'html-to-image';
 import { OrgNode, LayoutDirection } from '../types';
+import type { ThemeId } from '../theme';
 
 interface OrgChartProps {
   data: OrgNode;
   direction: LayoutDirection;
   targetAspectRatio: number;
+  themeId: ThemeId;
 }
 
 export interface OrgChartRef {
@@ -21,7 +23,7 @@ const GAP_V = 48;         // Reduced from 80
 const GRID_GAP = 12;      // Reduced from 20
 const CHANNEL_WIDTH = 30; // Reduced from 70
 
-export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, direction, targetAspectRatio }, ref) => {
+export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, direction, targetAspectRatio, themeId }, ref) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -376,6 +378,9 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
 
   useEffect(() => {
     if (!data || !svgRef.current) return;
+    const containerEl = containerRef.current;
+    const computed = containerEl ? window.getComputedStyle(containerEl) : null;
+    const chartLinkStroke = (computed?.getPropertyValue('--chart-link') || '').trim() || '#cbd5e1';
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove(); // Clear previous render
@@ -450,7 +455,7 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
       .append("path")
       .attr("class", "link")
       .attr("fill", "none")
-      .attr("stroke", "#cbd5e1")
+      .attr("stroke", chartLinkStroke)
       .attr("stroke-width", 1.5) // Thinner lines for compact view
       .attr("d", (d: any) => {
         const source = d.source;
@@ -507,8 +512,8 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
         // Compact Inline Styles
         const cardStyle = `
             width: 100%; height: 100%; 
-            background-color: white; 
-            border: 1px solid ${hasChildren ? '#c7d2fe' : '#e2e8f0'}; 
+          background-color: var(--card-bg); 
+          border: 1px solid ${hasChildren ? 'var(--card-border-manager)' : 'var(--card-border)'}; 
             border-radius: 0.375rem; 
             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
             display: flex; flex-direction: column; 
@@ -529,14 +534,14 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
         `;
 
         const nameStyle = `
-            color: #0f172a; font-weight: 700; font-size: 12px; 
+          color: var(--card-name); font-weight: 700; font-size: 12px; 
             line-height: 1.2; 
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             display: block; margin-bottom: 2px;
         `;
 
         const titleStyle = `
-            color: #4f46e5; font-weight: 600; font-size: 10px; 
+          color: var(--card-title); font-weight: 600; font-size: 10px; 
             line-height: 1.2; 
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             display: block;
@@ -548,7 +553,7 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
         `;
 
         const deptStyle = `
-            font-size: 9px; color: #64748b; font-weight: 500; 
+          font-size: 9px; color: var(--card-dept); font-weight: 500; 
             text-transform: uppercase; letter-spacing: 0.025em; 
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
             display: block;
@@ -559,8 +564,8 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
             border-radius: 9999px; border-width: 1px;
             display: flex; align-items: center; justify-content: center; flex-shrink: 0;
             ${isCollapsed 
-                ? 'background-color: #4f46e5; color: white; border-color: #4f46e5;' 
-                : 'background-color: #eef2ff; color: #4f46e5; border-color: #c7d2fe;' 
+            ? 'background-color: var(--badge-bg-collapsed); color: var(--badge-fg-collapsed); border-color: var(--badge-border-collapsed);' 
+            : 'background-color: var(--badge-bg); color: var(--badge-fg); border-color: var(--badge-border);' 
             }
         `;
 
@@ -596,28 +601,29 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
       `;
       });
 
-  }, [data, dimensions, direction, targetAspectRatio, collapsedIds]);
+  }, [data, dimensions, direction, targetAspectRatio, collapsedIds, themeId]);
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-slate-50/50 relative overflow-hidden">
+    <div ref={containerRef} className="w-full h-full relative overflow-hidden" style={{ backgroundColor: 'var(--chart-bg)' }}>
      <div
        data-export-exclude="true"
        className="absolute inset-0 opacity-[0.03] pointer-events-none" 
-           style={{ backgroundImage: 'radial-gradient(#4f46e5 1px, transparent 1px)', backgroundSize: '16px 16px' }}>
+           style={{ backgroundImage: 'radial-gradient(var(--chart-grid-dot) 1px, transparent 1px)', backgroundSize: '16px 16px' }}>
       </div>
       <svg data-chart-svg="true" ref={svgRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
 
       <div
         data-export-exclude="true"
-        className="absolute bottom-4 left-4 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-slate-100 text-[10px] text-slate-500 pointer-events-none select-none"
+        className="absolute bottom-4 left-4 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm pointer-events-none select-none text-[10px]"
+        style={{ backgroundColor: 'var(--overlay-bg)', border: '1px solid var(--overlay-border)', color: 'var(--overlay-text)' }}
       >
         No data is shared — everything stays local in your browser.
       </div>
       
       
       
-      <div data-export-exclude="true" className="absolute bottom-4 right-4 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-slate-100 text-[10px] text-slate-400 pointer-events-none select-none flex items-center gap-2">
-         <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+      <div data-export-exclude="true" className="absolute bottom-4 right-4 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm pointer-events-none select-none flex items-center gap-2 text-[10px]" style={{ backgroundColor: 'var(--overlay-bg)', border: '1px solid var(--overlay-border)', color: 'var(--overlay-text)' }}>
+        <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: 'var(--accent)' }}></span>
          Overlap-Free Engine v3 (Compact)
       </div>
     </div>
