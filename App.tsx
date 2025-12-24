@@ -4,9 +4,10 @@ import { InputPanel } from './components/InputPanel';
 import { INITIAL_DATA } from './constants';
 import { OrgNode, LayoutDirection } from './types';
 import { Menu, X, Ratio, Download } from 'lucide-react';
-import { ChartThemeProvider, CHART_THEMES, ChartThemeId, useChartTheme } from './theme';
+import { ChartThemeProvider, CHART_THEMES, ChartThemeId, SiteThemeId, SITE_THEMES, SiteThemeProvider, useChartTheme, useSiteTheme } from './theme';
 
 const AppInner: React.FC = () => {
+  const { siteThemeId, setSiteThemeId } = useSiteTheme();
   const { chartThemeId, setChartThemeId } = useChartTheme();
   const [data, setData] = useState<OrgNode>(INITIAL_DATA);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -97,13 +98,13 @@ const AppInner: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden relative" style={{ backgroundColor: 'var(--app-bg)', color: 'var(--text)' }}>
+    <div className="flex h-screen w-screen overflow-hidden relative" style={{ backgroundColor: 'var(--ui-bg)', color: 'var(--ui-text)' }}>
       
       {/* Mobile Sidebar Toggle - visible only on small screens or when closed */}
       <button 
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
         className="absolute top-4 left-4 z-30 p-2 rounded-lg shadow-md md:hidden"
-        style={{ backgroundColor: 'var(--overlay-bg)', border: '1px solid var(--overlay-border)', color: 'var(--text)' }}
+        style={{ backgroundColor: 'var(--ui-overlay-bg)', border: '1px solid var(--ui-overlay-border)', color: 'var(--ui-text)' }}
       >
         {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
       </button>
@@ -140,7 +141,7 @@ const AppInner: React.FC = () => {
              setIsSidebarOpen(false);
            }}
            className="hidden md:flex absolute top-1/2 -right-3 w-6 h-12 items-center justify-center rounded-r-lg shadow-md cursor-pointer z-50"
-           style={{ backgroundColor: 'var(--surface)', borderTop: '1px solid var(--border)', borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)', color: 'var(--muted)' }}
+           style={{ backgroundColor: 'var(--ui-surface)', borderTop: '1px solid var(--ui-border)', borderRight: '1px solid var(--ui-border)', borderBottom: '1px solid var(--ui-border)', color: 'var(--ui-muted)' }}
            title="Collapse Sidebar"
         >
              <div className="w-1 h-4 bg-gray-300 rounded-full" />
@@ -152,7 +153,7 @@ const AppInner: React.FC = () => {
          <button
          onClick={() => setIsSidebarOpen(true)}
         className="hidden md:flex absolute top-1/2 left-0 w-6 h-12 items-center justify-center rounded-r-lg shadow-md cursor-pointer z-50"
-        style={{ backgroundColor: 'var(--surface)', borderTop: '1px solid var(--border)', borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)', color: 'var(--muted)' }}
+        style={{ backgroundColor: 'var(--ui-surface)', borderTop: '1px solid var(--ui-border)', borderRight: '1px solid var(--ui-border)', borderBottom: '1px solid var(--ui-border)', color: 'var(--ui-muted)' }}
          title="Expand Sidebar"
       >
            <div className="w-1 h-4 bg-gray-300 rounded-full" />
@@ -164,9 +165,34 @@ const AppInner: React.FC = () => {
         {/* Toolbar */}
         <div className="absolute top-6 right-6 z-10 flex gap-4 items-start">
 
+            {/* Site theme */}
+            <div className="backdrop-blur rounded-lg shadow-sm px-3 py-2 flex items-center gap-2" style={{ backgroundColor: 'var(--ui-overlay-bg)', border: '1px solid var(--ui-overlay-border)', color: 'var(--ui-text)' }}>
+              <label className="text-xs font-semibold" style={{ color: 'var(--ui-muted)' }} htmlFor="site-theme">
+                Site theme
+              </label>
+              <select
+                id="site-theme"
+                value={siteThemeId}
+                onChange={(e) => setSiteThemeId(e.target.value as SiteThemeId)}
+                className="text-sm outline-none rounded-md px-2 py-1"
+                style={{
+                  color: 'var(--ui-text)',
+                  backgroundColor: 'var(--ui-surface)',
+                  border: '1px solid var(--ui-border)',
+                }}
+                title="Site theme"
+              >
+                {SITE_THEMES.map(t => (
+                  <option key={t.id} value={t.id} style={{ backgroundColor: 'var(--ui-surface)', color: 'var(--ui-text)' }}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Chart theme */}
-            <div className="backdrop-blur rounded-lg shadow-sm px-3 py-2 flex items-center gap-2" style={{ backgroundColor: 'var(--overlay-bg)', border: '1px solid var(--overlay-border)', color: 'var(--text)' }}>
-              <label className="text-xs font-semibold" style={{ color: 'var(--muted)' }} htmlFor="chart-theme">
+            <div className="backdrop-blur rounded-lg shadow-sm px-3 py-2 flex items-center gap-2" style={{ backgroundColor: 'var(--ui-overlay-bg)', border: '1px solid var(--ui-overlay-border)', color: 'var(--ui-text)' }}>
+              <label className="text-xs font-semibold" style={{ color: 'var(--ui-muted)' }} htmlFor="chart-theme">
                 Chart theme
               </label>
               <select
@@ -175,14 +201,14 @@ const AppInner: React.FC = () => {
                 onChange={(e) => setChartThemeId(e.target.value as ChartThemeId)}
                 className="text-sm outline-none rounded-md px-2 py-1"
                 style={{
-                  color: 'var(--text)',
-                  backgroundColor: 'var(--surface)',
-                  border: '1px solid var(--border)',
+                  color: 'var(--ui-text)',
+                  backgroundColor: 'var(--ui-surface)',
+                  border: '1px solid var(--ui-border)',
                 }}
                 title="Chart theme"
               >
                 {CHART_THEMES.map(t => (
-                  <option key={t.id} value={t.id} style={{ backgroundColor: 'var(--surface)', color: 'var(--text)' }}>
+                  <option key={t.id} value={t.id} style={{ backgroundColor: 'var(--ui-surface)', color: 'var(--ui-text)' }}>
                     {t.label}
                   </option>
                 ))}
@@ -190,8 +216,8 @@ const AppInner: React.FC = () => {
             </div>
             
             {/* Aspect Ratio Control */}
-            <div className="backdrop-blur rounded-lg shadow-sm p-2 flex flex-col gap-1 w-32" style={{ backgroundColor: 'var(--overlay-bg)', border: '1px solid var(--overlay-border)', color: 'var(--text)' }}>
-                <div className="flex items-center gap-2 text-xs font-semibold mb-1" style={{ color: 'var(--muted)' }}>
+            <div className="backdrop-blur rounded-lg shadow-sm p-2 flex flex-col gap-1 w-32" style={{ backgroundColor: 'var(--ui-overlay-bg)', border: '1px solid var(--ui-overlay-border)', color: 'var(--ui-text)' }}>
+              <div className="flex items-center gap-2 text-xs font-semibold mb-1" style={{ color: 'var(--ui-muted)' }}>
                     <Ratio size={14} />
                     <span>Aspect Ratio</span>
                 </div>
@@ -205,7 +231,7 @@ const AppInner: React.FC = () => {
                         onChange={(e) => setTargetAspectRatio(parseFloat(e.target.value))}
                         className="w-full h-2 bg-indigo-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                     />
-                    <span className="text-xs w-6 text-right" style={{ color: 'var(--muted)' }}>{targetAspectRatio}</span>
+                    <span className="text-xs w-6 text-right" style={{ color: 'var(--ui-muted)' }}>{targetAspectRatio}</span>
                 </div>
             </div>
 
@@ -213,7 +239,7 @@ const AppInner: React.FC = () => {
             <button 
               onClick={handleDownload}
               className="backdrop-blur rounded-lg shadow-sm px-3 py-2 flex items-center gap-2 transition-all"
-              style={{ backgroundColor: 'var(--overlay-bg)', border: '1px solid var(--overlay-border)', color: 'var(--text)' }}
+              style={{ backgroundColor: 'var(--ui-overlay-bg)', border: '1px solid var(--ui-overlay-border)', color: 'var(--ui-text)' }}
               title="Download image (PNG)"
             >
               <Download size={18} />
@@ -222,7 +248,7 @@ const AppInner: React.FC = () => {
         </div>
 
         {/* Chart View */}
-        <div className="flex-1 overflow-hidden" style={{ backgroundColor: 'var(--app-bg)' }}>
+        <div className="flex-1 overflow-hidden" style={{ backgroundColor: 'var(--ui-bg)' }}>
           <OrgChart 
             ref={chartRef}
             data={data} 
@@ -238,9 +264,11 @@ const AppInner: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <ChartThemeProvider>
-      <AppInner />
-    </ChartThemeProvider>
+    <SiteThemeProvider>
+      <ChartThemeProvider>
+        <AppInner />
+      </ChartThemeProvider>
+    </SiteThemeProvider>
   );
 };
 

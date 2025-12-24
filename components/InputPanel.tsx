@@ -407,25 +407,25 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
   return (
     <div
       className="flex flex-col h-full w-full shadow-xl z-20"
-      style={{ backgroundColor: 'var(--surface)', borderRight: '1px solid var(--border)', color: 'var(--text)' }}
+      style={{ backgroundColor: 'var(--ui-surface)', borderRight: '1px solid var(--ui-border)', color: 'var(--ui-text)' }}
     >
-      <div className="p-6" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--accent)', color: 'var(--accent-contrast)' }}>
+      <div className="p-6" style={{ borderBottom: '1px solid var(--ui-border)', backgroundColor: 'var(--ui-accent)', color: 'var(--ui-accent-contrast)' }}>
         <h1 className="text-xl font-bold flex items-center gap-2">
           <Layers className="w-6 h-6" />
           Harkje
         </h1>
-        <p className="text-sm mt-1 opacity-90" style={{ color: 'var(--accent-contrast)' }}>
+        <p className="text-sm mt-1 opacity-90" style={{ color: 'var(--ui-accent-contrast)' }}>
           Visualize your team structure effortlessly.
         </p>
       </div>
 
-      <div className="flex" style={{ borderBottom: '1px solid var(--border)' }}>
+      <div className="flex" style={{ borderBottom: '1px solid var(--ui-border)' }}>
         <button
           onClick={() => setActiveTab('ai')}
           className="flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors"
           style={activeTab === 'ai'
-            ? { color: 'var(--accent)', borderBottom: '2px solid var(--accent)', backgroundColor: 'var(--surface-2)' }
-            : { color: 'var(--muted)' }}
+            ? { color: 'var(--ui-accent)', borderBottom: '2px solid var(--ui-accent)', backgroundColor: 'var(--ui-surface-2)' }
+            : { color: 'var(--ui-muted)' }}
         >
           <Wand2 className="w-4 h-4" />
           Generator
@@ -434,8 +434,8 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
           onClick={() => setActiveTab('json')}
           className="flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors"
           style={activeTab === 'json'
-            ? { color: 'var(--accent)', borderBottom: '2px solid var(--accent)', backgroundColor: 'var(--surface-2)' }
-            : { color: 'var(--muted)' }}
+            ? { color: 'var(--ui-accent)', borderBottom: '2px solid var(--ui-accent)', backgroundColor: 'var(--ui-surface-2)' }
+            : { color: 'var(--ui-muted)' }}
         >
           <FileJson className="w-4 h-4" />
           List Editor
@@ -444,8 +444,8 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
           onClick={() => setActiveTab('csv')}
           className="flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors"
           style={activeTab === 'csv'
-            ? { color: 'var(--accent)', borderBottom: '2px solid var(--accent)', backgroundColor: 'var(--surface-2)' }
-            : { color: 'var(--muted)' }}
+            ? { color: 'var(--ui-accent)', borderBottom: '2px solid var(--ui-accent)', backgroundColor: 'var(--ui-surface-2)' }
+            : { color: 'var(--ui-muted)' }}
         >
           <Sheet className="w-4 h-4" />
           CSV
@@ -456,47 +456,50 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
         {activeTab === 'ai' ? (
           <div className="space-y-8">
             {/* How-to */}
-            <div className="p-4 rounded-xl" style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-              <h2 className="text-sm font-bold" style={{ color: 'var(--text)' }}>How to use Harkje</h2>
-              <ul className="mt-2 space-y-1 text-xs list-disc pl-4" style={{ color: 'var(--muted)' }}>
+            <div className="p-4 rounded-xl" style={{ backgroundColor: 'var(--ui-surface-2)', border: '1px solid var(--ui-border)' }}>
+              <h2 className="text-sm font-bold" style={{ color: 'var(--ui-text)' }}>How to use Harkje</h2>
+              <ul className="mt-2 space-y-1 text-xs list-disc pl-4" style={{ color: 'var(--ui-muted)' }}>
                 <li>Use <span className="font-semibold">Generator</span> to create a quick example org by size.</li>
                 <li>Use <span className="font-semibold">List Editor</span> (JSON) or <span className="font-semibold">CSV</span> to paste/edit your own org data.</li>
                 <li>In the chart: scroll to zoom, drag to pan, click a manager to collapse/expand their team.</li>
                 <li>Use <span className="font-semibold">Download image</span> (top-right) to export a PNG for slides.</li>
               </ul>
-              <p className="mt-2 text-[11px]" style={{ color: 'var(--muted)' }}>
+              <p className="mt-2 text-[11px]" style={{ color: 'var(--ui-muted)' }}>
                 Privacy: no data is uploaded — everything stays local in your browser.
               </p>
             </div>
 
             {/* Quick Generator Section */}
-            <div className="p-4 rounded-xl" style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+            <div className="p-4 rounded-xl" style={{ backgroundColor: 'var(--ui-surface-2)', border: '1px solid var(--ui-border)' }}>
               <div className="flex items-center gap-2 mb-4">
-                 <div className="p-1.5 bg-violet-100 rounded-md text-violet-600">
+                <div
+                  className="p-1.5 rounded-md"
+                  style={{ backgroundColor: 'var(--ui-surface)', border: '1px solid var(--ui-border)', color: 'var(--ui-accent)' }}
+                >
                     <Dices size={16} />
                  </div>
-                  <h2 className="text-sm font-bold" style={{ color: 'var(--text)' }}>Generator</h2>
+                <h2 className="text-sm font-bold" style={{ color: 'var(--ui-text)' }}>Generator</h2>
               </div>
               
               <div className="space-y-4">
                   <div>
-                      <label className="block text-xs font-semibold text-gray-500 mb-1.5">Organization Size</label>
+                      <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--ui-muted)' }}>Organization Size</label>
                       <div className="grid grid-cols-3 gap-2">
                           {(['small', 'medium', 'large'] as const).map((s) => (
                               <button
                                 key={s}
                                 onClick={() => setQuickSize(s)}
-                                className={`py-2 px-1 text-xs font-medium rounded-lg capitalize transition-all ${
-                                    quickSize === s 
-                                    ? 'bg-violet-600 text-white shadow-md' 
-                                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-                                }`}
+                          className="py-2 px-1 text-xs font-medium rounded-lg capitalize transition-all"
+                          style={quickSize === s
+                            ? { backgroundColor: 'var(--ui-accent)', color: 'var(--ui-accent-contrast)', border: '1px solid var(--ui-accent)' }
+                            : { backgroundColor: 'var(--ui-surface)', color: 'var(--ui-muted)', border: '1px solid var(--ui-border)' }
+                          }
                               >
                                   {s}
                               </button>
                           ))}
                       </div>
-                      <p className="text-[10px] text-gray-400 mt-1.5 text-right">
+                      <p className="text-[10px] mt-1.5 text-right" style={{ color: 'var(--ui-muted)' }}>
                           {quickSize === 'small' && '~5-8 nodes'}
                           {quickSize === 'medium' && '~15-20 nodes'}
                           {quickSize === 'large' && '~30-40 nodes'}
@@ -506,7 +509,8 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
                   <button
                     onClick={handleQuickGenerate}
                     disabled={isLoading}
-                    className="w-full py-3 px-4 bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white font-medium rounded-xl shadow-md transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+                    className="w-full py-3 px-4 font-medium rounded-xl shadow-md transition-all flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50"
+                    style={{ backgroundColor: 'var(--ui-accent)', color: 'var(--ui-accent-contrast)' }}
                   >
                     {isLoading ? (
                         <Loader2 className="w-5 h-5 animate-spin" />
@@ -522,20 +526,22 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
         ) : activeTab === 'json' ? (
           <div className="space-y-4 h-full flex flex-col">
             <div className="flex-1">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--ui-text)' }}>
                 Structure Data (Flat Array)
               </label>
-              <p className="text-xs text-gray-500 mb-2">Edit the array below. Use <code>"parentId": "null"</code> for the root node.</p>
+              <p className="text-xs mb-2" style={{ color: 'var(--ui-muted)' }}>Edit the array below. Use <code>"parentId": "null"</code> for the root node.</p>
               <textarea
                 value={jsonInput}
                 onChange={(e) => setJsonInput(e.target.value)}
-                className="w-full h-[calc(100%-4rem)] p-4 font-mono text-xs border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 text-slate-700 resize-none"
+                className="w-full h-[calc(100%-4rem)] p-4 font-mono text-xs border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
+                style={{ borderColor: 'var(--ui-border)', backgroundColor: 'var(--ui-surface-2)', color: 'var(--ui-text)' }}
                 placeholder='[{"id": "1", "parentId": "null", "name": "CEO", ...}]'
               />
             </div>
             <button
               onClick={handleJsonUpdate}
-              className="w-full py-2.5 px-4 bg-gray-800 hover:bg-gray-900 text-white font-medium rounded-xl shadow-md transition-all"
+              className="w-full py-2.5 px-4 font-medium rounded-xl shadow-md transition-all"
+              style={{ backgroundColor: 'var(--ui-accent)', color: 'var(--ui-accent-contrast)' }}
             >
               Update Visualization
             </button>
@@ -543,31 +549,33 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
         ) : (
           <div className="space-y-4 h-full flex flex-col">
             <div className="flex-1">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--ui-text)' }}>
                 Structure Data (CSV)
               </label>
-              <p className="text-xs text-gray-500 mb-2">
+              <p className="text-xs mb-2" style={{ color: 'var(--ui-muted)' }}>
                 Only <code>user</code> and <code>manager</code> are required. Leave <code>manager</code> empty (or <code>null</code>) for the single root.
               </p>
-              <p className="text-xs text-gray-500 mb-2">
+              <p className="text-xs mb-2" style={{ color: 'var(--ui-muted)' }}>
                 Leaf employees (who manage nobody) need no special handling — just include them as normal rows with a manager.
               </p>
-              <p className="text-xs text-gray-500 mb-2">
+              <p className="text-xs mb-2" style={{ color: 'var(--ui-muted)' }}>
                 Empty values are allowed for <code>title</code>/<code>department</code>/<code>details</code>. <code>user</code> must be filled.
               </p>
-              <p className="text-xs text-gray-500 mb-2">
+              <p className="text-xs mb-2" style={{ color: 'var(--ui-muted)' }}>
                 Example: <code>Jane Doe,,CEO,Executive,"Leads the company"</code>
               </p>
               <textarea
                 value={csvInput}
                 onChange={(e) => setCsvInput(e.target.value)}
-                className="w-full h-[calc(100%-6rem)] p-4 font-mono text-xs border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 text-slate-700 resize-none"
+                className="w-full h-[calc(100%-6rem)] p-4 font-mono text-xs border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
+                style={{ borderColor: 'var(--ui-border)', backgroundColor: 'var(--ui-surface-2)', color: 'var(--ui-text)' }}
                 placeholder={'user,manager,title,department,details\nJane Doe,,CEO,Executive,"Leads the company"\nJohn Smith,Jane Doe,Engineering Manager,Engineering,"Runs the platform team"'}
               />
             </div>
             <button
               onClick={handleCsvUpdate}
-              className="w-full py-2.5 px-4 bg-gray-800 hover:bg-gray-900 text-white font-medium rounded-xl shadow-md transition-all"
+              className="w-full py-2.5 px-4 font-medium rounded-xl shadow-md transition-all"
+              style={{ backgroundColor: 'var(--ui-accent)', color: 'var(--ui-accent-contrast)' }}
             >
               Update Visualization
             </button>
@@ -581,9 +589,9 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
         )}
       </div>
 
-      <div className="p-4 border-t border-gray-200 bg-gray-50 text-center">
-        <p className="text-xs text-gray-400">Powered by random generation & D3.js</p>
-        <p className="text-[10px] text-gray-400 mt-1">
+      <div className="p-4 border-t text-center" style={{ borderColor: 'var(--ui-border)', backgroundColor: 'var(--ui-surface-2)' }}>
+        <p className="text-xs" style={{ color: 'var(--ui-muted)' }}>Powered by random generation & D3.js</p>
+        <p className="text-[10px] mt-1" style={{ color: 'var(--ui-muted)' }}>
           {buildShaShort && buildTime
             ? <>Deployed: {buildTime} • {buildShaShort}</>
             : buildShaShort

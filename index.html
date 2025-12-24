@@ -8,15 +8,22 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous">
     <style>
       :root {
-        /* App surfaces */
-        --app-bg: #f3f4f6;
-        --surface: #ffffff;
-        --surface-2: #f8fafc;
-        --border: #e5e7eb;
-        --text: #0f172a;
-        --muted: #64748b;
+        /* UI (site) theme tokens */
+        --ui-bg: #f3f4f6;
+        --ui-surface: #ffffff;
+        --ui-surface-2: #f8fafc;
+        --ui-border: #e5e7eb;
+        --ui-text: #0f172a;
+        --ui-muted: #64748b;
+        --ui-accent: #4f46e5;
+        --ui-accent-contrast: #ffffff;
+        --ui-overlay-bg: rgba(255, 255, 255, 0.8);
+        --ui-overlay-border: rgba(226, 232, 240, 1);
+        --ui-overlay-text: #64748b;
+        --ui-scrollbar-thumb: rgba(148, 163, 184, 0.9);
+        --ui-scrollbar-thumb-hover: rgba(100, 116, 139, 1);
 
-        /* Accent */
+        /* Accent (chart) */
         --accent: #4f46e5;
         --accent-2: #7c3aed;
         --accent-contrast: #ffffff;
@@ -59,6 +66,22 @@
         --overlay-bg: rgba(255, 255, 255, 0.8);
         --overlay-text: #64748b;
         --overlay-border: rgba(226, 232, 240, 1);
+      }
+
+      html[data-site-theme="dark"] {
+        --ui-bg: #0b1220;
+        --ui-surface: #0f172a;
+        --ui-surface-2: #111c33;
+        --ui-border: #233055;
+        --ui-text: #e5e7eb;
+        --ui-muted: #94a3b8;
+        --ui-accent: #818cf8;
+        --ui-accent-contrast: #0b1220;
+        --ui-overlay-bg: rgba(15, 23, 42, 0.8);
+        --ui-overlay-border: rgba(35, 48, 85, 1);
+        --ui-overlay-text: #94a3b8;
+        --ui-scrollbar-thumb: rgba(51, 65, 85, 1);
+        --ui-scrollbar-thumb-hover: rgba(148, 163, 184, 1);
       }
 
       [data-chart-theme="dark"] {
@@ -133,8 +156,8 @@
 
       body {
         font-family: 'Inter', sans-serif;
-        background-color: var(--app-bg);
-        color: var(--text);
+        background-color: var(--ui-bg);
+        color: var(--ui-text);
         overflow: hidden; /* App handles scrolling */
       }
       /* Custom scrollbar for sidebar */
@@ -146,11 +169,11 @@
         background: transparent;
       }
       ::-webkit-scrollbar-thumb {
-        background: var(--chart-link);
+        background: var(--ui-scrollbar-thumb);
         border-radius: 4px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: var(--muted);
+        background: var(--ui-scrollbar-thumb-hover);
       }
     </style>
   <script type="importmap">
