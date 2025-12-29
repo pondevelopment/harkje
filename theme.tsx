@@ -84,12 +84,13 @@ export const useSiteTheme = (): SiteThemeContextValue => {
  * chart container element.
  */
 
-export type ChartThemeId = 'light' | 'soft' | 'warm' | 'classic' | 'dark' | 'highContrast';
+export type ChartThemeId = 'light' | 'soft' | 'warm' | 'pencil' | 'classic' | 'dark' | 'highContrast';
 
 export const CHART_THEMES: Array<{ id: ChartThemeId; label: string }> = [
   { id: 'light', label: 'Light' },
   { id: 'soft', label: 'Soft' },
   { id: 'warm', label: 'Warm' },
+  { id: 'pencil', label: 'Pencil' },
   { id: 'classic', label: 'Classic' },
   { id: 'dark', label: 'Dark' },
   { id: 'highContrast', label: 'High Contrast' },
@@ -98,7 +99,7 @@ export const CHART_THEMES: Array<{ id: ChartThemeId; label: string }> = [
 const STORAGE_KEY = 'harkje.chartTheme';
 
 const isChartThemeId = (value: unknown): value is ChartThemeId => {
-  return value === 'light' || value === 'soft' || value === 'warm' || value === 'classic' || value === 'dark' || value === 'highContrast';
+  return value === 'light' || value === 'soft' || value === 'warm' || value === 'pencil' || value === 'classic' || value === 'dark' || value === 'highContrast';
 };
 
 const getSystemTheme = (): ChartThemeId => {
