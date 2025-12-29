@@ -8,6 +8,12 @@ It includes:
 - A **D3-based org chart renderer** with pan/zoom, click-to-collapse, and PNG export.
 - A **local, deterministic random generator** (no API keys, no external services).
 
+## Source code
+
+Public repository (PRs welcome):
+
+- <https://github.com/pondevelopment/harkje/>
+
 ## Tech stack
 
 - Vite + React + TypeScript
