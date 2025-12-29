@@ -591,7 +591,18 @@ export const InputPanel: React.FC<InputPanelProps> = ({ onDataUpdate, currentDat
       </div>
 
       <div className="p-4 border-t text-center" style={{ borderColor: 'var(--ui-border)', backgroundColor: 'var(--ui-surface-2)' }}>
-        <p className="text-xs" style={{ color: 'var(--ui-muted)' }}>Powered by random generation & D3.js</p>
+        <p className="text-xs" style={{ color: 'var(--ui-muted)' }}>
+          Powered by random generation & D3.js •{' '}
+          <a
+            href="https://github.com/pondevelopment/harkje/"
+            target="_blank"
+            rel="noreferrer"
+            className="underline underline-offset-2"
+            style={{ color: 'var(--ui-muted)' }}
+          >
+            GitHub
+          </a>
+        </p>
         <p className="text-[10px] mt-1" style={{ color: 'var(--ui-muted)' }}>
           {buildShaShort && buildTime
             ? <>Deployed: {buildTime} • {buildShaShort}</>
