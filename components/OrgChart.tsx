@@ -623,10 +623,20 @@ export const OrgChart = forwardRef<OrgChartRef, OrgChartProps>(({ data, directio
 
       <div
         data-export-exclude="true"
-        className="absolute bottom-4 left-4 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm pointer-events-none select-none text-[10px]"
+        className="absolute bottom-4 left-4 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm select-none text-[10px] flex items-center gap-2"
         style={{ backgroundColor: 'var(--overlay-bg)', border: '1px solid var(--overlay-border)', color: 'var(--overlay-text)' }}
       >
-        No data is shared — everything stays local in your browser.
+        <span className="pointer-events-none">No data is shared — everything stays local in your browser.</span>
+        <span className="pointer-events-none">•</span>
+        <a
+          href="https://github.com/pondevelopment/harkje/"
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2"
+          style={{ color: 'var(--overlay-text)' }}
+        >
+          Source
+        </a>
       </div>
       
       
