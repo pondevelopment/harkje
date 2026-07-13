@@ -2,9 +2,6 @@ import { Injectable } from '@angular/core';
 import * as d3 from 'd3';
 import { LayoutDirection, OrgNode } from '../models/org.types';
 
-/**
- * Layout engine interface: rectangle bounds used for link routing.
- */
 export interface LayoutRect {
   id: string;
   left: number;
@@ -22,460 +19,769 @@ export interface LayoutBounds {
   treeHeight: number;
 }
 
-/** Layout configuration constants (compact mode). */
+export interface LayoutPoint {
+  x: number;
+  y: number;
+}
+
+export interface LayoutResult {
+  /** Actual bounds of all cards. */
+  bounds: LayoutBounds;
+  /** Exact target-ratio frame, including at least EXPORT_PADDING on every side. */
+  frameBounds: LayoutBounds;
+  routes: ReadonlyMap<string, readonly LayoutPoint[]>;
+  rowsByParent: ReadonlyMap<string, readonly (readonly string[])[]>;
+  targetAspectRatio: number;
+  achievedAspectRatio: number;
+  signature: string;
+  candidateCount: number;
+}
+
 export const CARD_WIDTH = 180;
 export const CARD_HEIGHT = 74;
-export const GAP_H = 20;
-export const GAP_V = 48;
-export const GRID_GAP = 12;
-export const CHANNEL_WIDTH = 30;
+export const LEVEL_GAP = 48;
+export const MIN_BRANCH_GAP = 12;
+export const MAX_BRANCH_GAP = 80;
+export const DEFAULT_BRANCH_GAP = 20;
+export const MIN_TARGET_ASPECT_RATIO = 0.25;
+export const MAX_TARGET_ASPECT_RATIO = 4;
+export const DEFAULT_TARGET_ASPECT_RATIO = 1;
+export const LINK_CARD_PADDING = 4;
+export const EXPORT_PADDING = 40;
 
-const COMPACTION_MIN_GAP = 2;
-const PHYSICS_EPSILON = 0.25;
+const LINK_CHANNEL_WIDTH = 24;
+const MAX_VARIANTS_PER_NODE = 32;
+const EXHAUSTIVE_PARTITION_CHILD_LIMIT = 8;
+const RATIO_TOLERANCE = 0.025;
+const ASPECT_PROFILES = [
+  0.25,
+  0.33,
+  0.5,
+  0.67,
+  0.75,
+  1,
+  1.25,
+  4 / 3,
+  1.5,
+  16 / 9,
+  2,
+  2.5,
+  3,
+  4,
+] as const;
 
-const LINK_CARD_PADDING = 4;
+type HierarchyNode = d3.HierarchyNode<OrgNode>;
+type PositionedNode = HierarchyNode & { x: number; y: number };
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+interface LogicalPoint {
+  breadth: number;
+  depth: number;
+}
+
+interface LogicalRect {
+  id: string;
+  minBreadth: number;
+  maxBreadth: number;
+  minDepth: number;
+  maxDepth: number;
+}
+
+interface LayoutVariant {
+  placements: Map<HierarchyNode, LogicalPoint>;
+  rects: LogicalRect[];
+  routes: Map<string, LogicalPoint[]>;
+  rowsByParent: Map<string, string[][]>;
+  minBreadth: number;
+  maxBreadth: number;
+  minDepth: number;
+  maxDepth: number;
+  logicalWidth: number;
+  logicalHeight: number;
+  physicalWidth: number;
+  physicalHeight: number;
+  connectorLength: number;
+  rowCount: number;
+  signature: string;
+}
 
 /**
- * Pure layout engine. Extracted verbatim from the React `OrgChart.tsx`
- * component so it has no DOM or Angular dependencies. All functions operate
- * on `d3.HierarchyNode<OrgNode>` instances mutated in place (x/y positions).
+ * Aspect-ratio-aware org-chart layout.
+ *
+ * The engine generates a bounded frontier of discrete, fixed-gap layouts for
+ * every subtree. Target aspect ratio only selects row partitions and child
+ * layout variants; it never scales coordinates or changes card/gap constants.
+ * Child order is preserved row-major, and every selected child subtree is
+ * translated as one rigid block using its real card contours.
  */
 @Injectable({ providedIn: 'root' })
 export class OrgLayoutService {
-  segmentIntersectsRect(
-    rect: { left: number; right: number; top: number; bottom: number },
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number,
-    pad: number,
-  ): boolean {
-    const left = rect.left - pad;
-    const right = rect.right + pad;
-    const top = rect.top - pad;
-    const bottom = rect.bottom + pad;
+  computeTidyLayout(
+    root: HierarchyNode,
+    direction: LayoutDirection,
+    branchGap: number = DEFAULT_BRANCH_GAP,
+    targetAspectRatio: number = DEFAULT_TARGET_ASPECT_RATIO,
+  ): LayoutResult {
+    const safeGap = this.clampBranchGap(branchGap);
+    const target = this.clampTargetRatio(targetAspectRatio);
+    const variants = this.buildVariants(root, direction, safeGap, new Map());
+    const selected = this.selectVariant(variants, target);
 
-    // Horizontal segment
-    if (y1 === y2) {
-      const y = y1;
-      const segLeft = Math.min(x1, x2);
-      const segRight = Math.max(x1, x2);
-      if (y < top || y > bottom) return false;
-      return !(segRight < left || segLeft > right);
+    for (const [node, point] of selected.placements) {
+      const positioned = node as PositionedNode;
+      if (direction === LayoutDirection.LeftRight) {
+        positioned.x = point.depth;
+        positioned.y = point.breadth;
+      } else {
+        positioned.x = point.breadth;
+        positioned.y = point.depth;
+      }
     }
 
-    // Vertical segment
-    if (x1 === x2) {
-      const x = x1;
-      const segTop = Math.min(y1, y2);
-      const segBottom = Math.max(y1, y2);
-      if (x < left || x > right) return false;
-      return !(segBottom < top || segTop > bottom);
+    const routes = new Map<string, LayoutPoint[]>();
+    for (const [key, route] of selected.routes) {
+      routes.set(
+        key,
+        route.map((point) => this.toPhysicalPoint(point, direction)),
+      );
     }
 
-    // Only axis-aligned segments are used.
-    return false;
+    const { bounds } = this.computeRectsAndBounds(root);
+    return {
+      bounds,
+      frameBounds: this.computeFrameBounds(bounds, target),
+      routes,
+      rowsByParent: selected.rowsByParent,
+      targetAspectRatio: target,
+      achievedAspectRatio: bounds.treeWidth / bounds.treeHeight,
+      signature: selected.signature,
+      candidateCount: variants.length,
+    };
   }
 
-  computeRectsAndBounds(root: d3.HierarchyNode<OrgNode>): {
+  computeRectsAndBounds(root: HierarchyNode): {
     rects: LayoutRect[];
     bounds: LayoutBounds;
   } {
-    let minX = Infinity,
-      maxX = -Infinity,
-      minY = Infinity,
-      maxY = -Infinity;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
     const rects: LayoutRect[] = [];
 
-    root.each((d: any) => {
-      const left = d.x - CARD_WIDTH / 2;
-      const right = d.x + CARD_WIDTH / 2;
-      const top = d.y;
-      const bottom = d.y + CARD_HEIGHT;
-      rects.push({ id: String(d.data.id), left, right, top, bottom });
-      if (left < minX) minX = left;
-      if (right > maxX) maxX = right;
-      if (top < minY) minY = top;
-      if (bottom > maxY) maxY = bottom;
+    root.each((node) => {
+      const positioned = node as PositionedNode;
+      const left = positioned.x - CARD_WIDTH / 2;
+      const right = positioned.x + CARD_WIDTH / 2;
+      const top = positioned.y;
+      const bottom = positioned.y + CARD_HEIGHT;
+      rects.push({ id: String(node.data.id), left, right, top, bottom });
+      minX = Math.min(minX, left);
+      maxX = Math.max(maxX, right);
+      minY = Math.min(minY, top);
+      maxY = Math.max(maxY, bottom);
     });
 
-    const treeWidth = maxX - minX;
-    const treeHeight = maxY - minY;
-    const bounds: LayoutBounds = { minX, maxX, minY, maxY, treeWidth, treeHeight };
-    return { rects, bounds };
+    return {
+      rects,
+      bounds: {
+        minX,
+        maxX,
+        minY,
+        maxY,
+        treeWidth: maxX - minX,
+        treeHeight: maxY - minY,
+      },
+    };
   }
 
-  findClearHorizontalY(
-    baseY: number,
-    sx: number,
-    tx: number,
-    sy: number,
-    ty: number,
-    rects: LayoutRect[],
-    excludeIds: Set<string>,
-  ): number | null {
-    const minY = Math.min(sy, ty) + 2;
-    const maxY = Math.max(sy, ty) - 2;
-    const clampedBase = Math.max(minY, Math.min(baseY, maxY));
-    const step = 6;
-    const maxSteps = 40;
+  buildLinkRoute(
+    link: d3.HierarchyLink<OrgNode>,
+    direction: LayoutDirection,
+    routes?: ReadonlyMap<string, readonly LayoutPoint[]>,
+  ): LayoutPoint[] {
+    const stored = routes?.get(this.linkKey(link.source, link.target));
+    if (stored) return stored.map((point) => ({ ...point }));
 
-    const isClear = (y: number): boolean => {
-      for (const r of rects) {
-        if (excludeIds.has(r.id)) continue;
-        if (this.segmentIntersectsRect(r, sx, y, tx, y, LINK_CARD_PADDING)) return false;
-        if (this.segmentIntersectsRect(r, sx, sy, sx, y, LINK_CARD_PADDING)) return false;
-        if (this.segmentIntersectsRect(r, tx, y, tx, ty, LINK_CARD_PADDING)) return false;
+    // Compatibility fallback for callers that position a strict tree manually.
+    const source = link.source as PositionedNode;
+    const target = link.target as PositionedNode;
+    if (direction === LayoutDirection.LeftRight) {
+      const sourceX = source.x + CARD_WIDTH / 2;
+      const sourceY = source.y + CARD_HEIGHT / 2;
+      const targetX = target.x - CARD_WIDTH / 2;
+      const targetY = target.y + CARD_HEIGHT / 2;
+      if (Math.abs(sourceY - targetY) < 0.001) {
+        return [{ x: sourceX, y: sourceY }, { x: targetX, y: targetY }];
       }
-      return true;
-    };
-
-    if (isClear(clampedBase)) return clampedBase;
-    for (let k = 1; k <= maxSteps; k++) {
-      const yUp = clampedBase - k * step;
-      if (yUp >= minY && isClear(yUp)) return yUp;
-      const yDown = clampedBase + k * step;
-      if (yDown <= maxY && isClear(yDown)) return yDown;
+      const channelX = (sourceX + targetX) / 2;
+      return [
+        { x: sourceX, y: sourceY },
+        { x: channelX, y: sourceY },
+        { x: channelX, y: targetY },
+        { x: targetX, y: targetY },
+      ];
     }
-    return null;
+
+    const sourceX = source.x;
+    const sourceY = source.y + CARD_HEIGHT;
+    const targetX = target.x;
+    const targetY = target.y;
+    if (Math.abs(sourceX - targetX) < 0.001) {
+      return [{ x: sourceX, y: sourceY }, { x: targetX, y: targetY }];
+    }
+    const channelY = (sourceY + targetY) / 2;
+    return [
+      { x: sourceX, y: sourceY },
+      { x: sourceX, y: channelY },
+      { x: targetX, y: channelY },
+      { x: targetX, y: targetY },
+    ];
   }
 
   buildLinkPath(
-    d: any,
-    rects: LayoutRect[],
-    bounds: { minX: number; maxX: number },
+    link: d3.HierarchyLink<OrgNode>,
+    direction: LayoutDirection,
+    routes?: ReadonlyMap<string, readonly LayoutPoint[]>,
   ): string {
-    const source = d.source;
-    const target = d.target;
-    const sx = source.x;
-    const sy = source.y + CARD_HEIGHT;
-    const tx = target.x;
-    const ty = target.y;
-
-    if (Math.abs(sx - tx) < 1) return `M ${sx} ${sy} L ${tx} ${ty}`;
-
-    const baseY = ty - Math.max(LINK_CARD_PADDING + 2, Math.min(GRID_GAP, GAP_V) / 2);
-    const exclude = new Set<string>([String(source.data.id), String(target.data.id)]);
-    const y = this.findClearHorizontalY(baseY, sx, tx, sy, ty, rects, exclude);
-    if (y !== null) {
-      return `M ${sx} ${sy} L ${sx} ${y} L ${tx} ${y} L ${tx} ${ty}`;
-    }
-
-    // Guaranteed fallback: route outside the layout bounds (left gutter).
-    const gutterX = bounds.minX - 24;
-    const y1 = sy + 2;
-    const y2 = ty - 2;
-    return `M ${sx} ${sy} L ${sx} ${y1} L ${gutterX} ${y1} L ${gutterX} ${y2} L ${tx} ${y2} L ${tx} ${ty}`;
+    return this.buildLinkRoute(link, direction, routes)
+      .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+      .join(' ');
   }
 
-  /**
-   * One pass of constrained compaction (PAVA / isotonic regression per depth
-   * band). Mutates node positions in place. Caller runs multiple frames.
-   */
-  compactLayoutOneShot(
-    root: d3.HierarchyNode<OrgNode>,
+  private buildVariants(
+    node: HierarchyNode,
     direction: LayoutDirection,
-  ): void {
-    const axisKey: 'x' | 'y' = direction === LayoutDirection.LeftRight ? 'y' : 'x';
-    const minDistWithinGroup =
-      (axisKey === 'x' ? CARD_WIDTH : CARD_HEIGHT) + COMPACTION_MIN_GAP;
+    branchGap: number,
+    memo: Map<HierarchyNode, LayoutVariant[]>,
+  ): LayoutVariant[] {
+    const cached = memo.get(node);
+    if (cached) return cached;
 
-    const extentMin = (pos: number) => (axisKey === 'x' ? pos - CARD_WIDTH / 2 : pos);
-    const extentMax = (pos: number) =>
-      axisKey === 'x' ? pos + CARD_WIDTH / 2 : pos + CARD_HEIGHT;
-
-    type HNode = d3.HierarchyNode<OrgNode> & any;
-    const descendants = root.descendants() as HNode[];
-    const maxDepth = descendants.reduce((m, d) => Math.max(m, d.depth ?? 0), 0);
-
-    for (let depth = 1; depth <= maxDepth; depth++) {
-      const nodesAtDepth = descendants.filter((d) => (d.depth ?? 0) === depth);
-      if (nodesAtDepth.length === 0) continue;
-
-      const groupsByParent = new Map<string, HNode[]>();
-      nodesAtDepth.forEach((d) => {
-        const pid = d.parent?.data?.id ? String(d.parent.data.id) : '__no_parent__';
-        const arr = groupsByParent.get(pid) ?? [];
-        arr.push(d);
-        groupsByParent.set(pid, arr);
-      });
-
-      const groupIds = Array.from(groupsByParent.keys());
-      groupIds.sort((a, b) => {
-        const aNodes = groupsByParent.get(a)!;
-        const bNodes = groupsByParent.get(b)!;
-        const ax = (aNodes[0]?.parent?.[axisKey] ?? 0) as number;
-        const bx = (bNodes[0]?.parent?.[axisKey] ?? 0) as number;
-        if (ax !== bx) return ax - bx;
-        return a.localeCompare(b);
-      });
-
-      const ordered: HNode[] = [];
-      for (const pid of groupIds) {
-        const group = groupsByParent.get(pid)!;
-        group.sort((a: any, b: any) => {
-          const da = (a[axisKey] ?? 0) as number;
-          const db = (b[axisKey] ?? 0) as number;
-          if (da !== db) return da - db;
-          return String(a.data.id).localeCompare(String(b.data.id));
-        });
-        ordered.push(...group);
-      }
-
-      if (ordered.length <= 1) {
-        const n = ordered[0];
-        if (n) {
-          const parentAxis = (n.parent?.[axisKey] ?? (n[axisKey] ?? 0)) as number;
-          n[axisKey] = (n[axisKey] ?? 0) * 0.15 + parentAxis * 0.85;
-        }
-        continue;
-      }
-
-      const minDist = minDistWithinGroup;
-      const desired = ordered.map((n) => {
-        const cur = (n[axisKey] ?? 0) as number;
-        const parentAxis = (n.parent?.[axisKey] ?? cur) as number;
-        let childrenMean: number | null = null;
-        if (n.children && n.children.length > 0) {
-          const childAxes = n.children
-            .map((c: any) => (c?.[axisKey] ?? null) as number | null)
-            .filter((v: number | null): v is number => v !== null && Number.isFinite(v));
-          if (childAxes.length > 0) {
-            childrenMean = childAxes.reduce((a: number, b: number) => a + b, 0) / childAxes.length;
-          }
-        }
-        const childTarget = childrenMean ?? parentAxis;
-        return parentAxis * 0.65 + childTarget * 0.3 + cur * 0.05;
-      });
-
-      const t = desired.map((d, i) => d - i * minDist);
-      const w = ordered.map(() => 1);
-
-      type Block = { start: number; end: number; wSum: number; mean: number };
-      const blocks: Block[] = [];
-
-      for (let i = 0; i < t.length; i++) {
-        let block: Block = { start: i, end: i, wSum: w[i]!, mean: t[i]! };
-        blocks.push(block);
-        while (blocks.length >= 2) {
-          const b2 = blocks[blocks.length - 1]!;
-          const b1 = blocks[blocks.length - 2]!;
-          if (b1.mean <= b2.mean) break;
-          const wSum = b1.wSum + b2.wSum;
-          const mean = (b1.mean * b1.wSum + b2.mean * b2.wSum) / wSum;
-          blocks.splice(blocks.length - 2, 2, { start: b1.start, end: b2.end, wSum, mean });
-        }
-      }
-
-      const q: number[] = new Array(t.length);
-      for (const b of blocks) {
-        for (let i = b.start; i <= b.end; i++) q[i] = b.mean;
-      }
-
-      const x = q.map((qi, i) => qi + i * minDist);
-
-      for (let i = 0; i < ordered.length; i++) {
-        ordered[i]![axisKey] = x[i]!;
-      }
-
-      const depthCenter =
-        (Math.min(...x.map(extentMin)) + Math.max(...x.map(extentMax))) / 2;
-      const parents = ordered.map((n) => (n.parent?.[axisKey] ?? 0) as number);
-      const parentCenter =
-        parents.length > 0
-          ? (Math.min(...parents) + Math.max(...parents)) / 2
-          : depthCenter;
-      const shift = (parentCenter - depthCenter) * 0.8;
-      if (Number.isFinite(shift) && Math.abs(shift) > 0.01) {
-        for (const n of ordered) {
-          n[axisKey] = (n[axisKey] ?? 0) + shift;
-        }
-      }
-    }
-  }
-
-  /** Epsilon used to detect compaction convergence. */
-  readonly physicsEpsilon = PHYSICS_EPSILON;
-
-  /**
-   * Hybrid layout engine: computes subtree sizes bottom-up (choosing row/grid/
-   * wrap layout by aspect ratio + leaf count), then positions top-down with
-   * symmetric channel splitting for grid/wrap nodes. Mutates node x/y in place.
-   */
-  computeBalancedLayout(
-    root: d3.HierarchyNode<OrgNode>,
-    direction: LayoutDirection,
-    targetAspectRatio: number,
-  ): void {
-    // 1. Post-Order Traversal (Bottom-Up): Calculate subtree sizes and configs
-    root.eachAfter((node: any) => {
-      const children = node.children;
-      if (!children || children.length === 0) {
-        node._w = CARD_WIDTH;
-        node._h = CARD_HEIGHT;
-        node._layout = 'leaf';
-        return;
-      }
-
-      const allChildrenAreLeaves = children.every(
-        (c: any) => !c.children || c.children.length === 0,
+    const cardBreadth = direction === LayoutDirection.LeftRight ? CARD_HEIGHT : CARD_WIDTH;
+    const cardDepth = direction === LayoutDirection.LeftRight ? CARD_WIDTH : CARD_HEIGHT;
+    const children = node.children ?? [];
+    if (children.length === 0) {
+      const leaf = this.finalizeVariant(
+        {
+          placements: new Map([[node, { breadth: 0, depth: 0 }]]),
+          rects: [{
+            id: String(node.data.id),
+            minBreadth: -cardBreadth / 2,
+            maxBreadth: cardBreadth / 2,
+            minDepth: 0,
+            maxDepth: cardDepth,
+          }],
+          routes: new Map(),
+          rowsByParent: new Map(),
+          connectorLength: 0,
+          rowCount: 0,
+          signature: `L:${node.data.id}`,
+        },
+        direction,
       );
-      let layoutType = 'row';
-      let rows: any[][] = [];
+      memo.set(node, [leaf]);
+      return [leaf];
+    }
 
-      if (allChildrenAreLeaves && children.length > 3) {
-        layoutType = 'grid';
-        const count = children.length;
-        const cols = Math.ceil(Math.sqrt(count * (CARD_WIDTH / CARD_HEIGHT)));
-        for (let i = 0; i < count; i += cols) {
-          rows.push(children.slice(i, i + cols));
-        }
-      } else {
-        let linearW = 0;
-        let maxChildH = 0;
-        children.forEach((c: any, i: number) => {
-          linearW += c._w;
-          if (i < children.length - 1) linearW += GAP_H;
-          maxChildH = Math.max(maxChildH, c._h);
-        });
-        const currentRatio = linearW / (CARD_HEIGHT + GAP_V + maxChildH);
-        if (currentRatio > targetAspectRatio * 1.5 && children.length >= 3) {
-          layoutType = 'wrap';
-          const area = linearW * maxChildH;
-          const idealWidth = Math.sqrt(area * targetAspectRatio);
-          let currentRow: any[] = [];
-          let currentRowWidth = 0;
-          children.forEach((child: any) => {
-            const childW = child._w;
-            if (currentRowWidth + childW > idealWidth && currentRow.length > 0) {
-              rows.push(currentRow);
-              currentRow = [child];
-              currentRowWidth = childW;
-            } else {
-              currentRow.push(child);
-              currentRowWidth += childW + (currentRow.length > 0 ? GAP_H : 0);
-            }
-          });
-          if (currentRow.length > 0) rows.push(currentRow);
-        } else {
-          layoutType = 'row';
-        }
+    const childFrontiers = children.map((child) =>
+      this.buildVariants(child, direction, branchGap, memo),
+    );
+    const selections = this.buildChildSelections(childFrontiers);
+    const generated: LayoutVariant[] = [];
+
+    for (const selectedChildren of selections) {
+      const partitions = this.generatePartitions(selectedChildren, direction);
+      for (const partition of partitions) {
+        generated.push(
+          this.composeVariant(
+            node,
+            selectedChildren,
+            partition,
+            direction,
+            branchGap,
+          ),
+        );
       }
+    }
 
-      node._layout = layoutType;
-      node._rows = rows;
+    const variants = this.pruneVariants(generated);
+    memo.set(node, variants);
+    return variants;
+  }
 
-      // Size calculation
-      if (layoutType === 'row') {
-        let totalW = 0;
-        let maxH = 0;
-        children.forEach((c: any, i: number) => {
-          totalW += c._w;
-          if (i < children.length - 1) totalW += GAP_H;
-          maxH = Math.max(maxH, c._h);
-        });
-        node._w = Math.max(CARD_WIDTH, totalW);
-        node._h = CARD_HEIGHT + GAP_V + maxH;
-      } else {
-        let maxRowW = 0;
-        let totalBlockH = 0;
-        rows.forEach((row, rowIndex) => {
-          const isLastRow = rowIndex === rows.length - 1;
-          if (isLastRow && row.length === 1) {
-            maxRowW = Math.max(maxRowW, row[0]._w);
-          } else {
-            const mid = Math.ceil(row.length / 2);
-            const left = row.slice(0, mid);
-            const right = row.slice(mid);
-            const gap = layoutType === 'grid' ? GRID_GAP : GAP_H;
-            let wLeft = 0;
-            left.forEach((c: any, i: number) => {
-              wLeft += c._w;
-              if (i < left.length - 1) wLeft += gap;
-            });
-            let wRight = 0;
-            right.forEach((c: any, i: number) => {
-              wRight += c._w;
-              if (i < right.length - 1) wRight += gap;
-            });
-            const distToLeftEdge = wLeft + CHANNEL_WIDTH / 2;
-            const distToRightEdge = wRight + CHANNEL_WIDTH / 2;
-            const symmetricRowWidth = Math.max(distToLeftEdge, distToRightEdge) * 2;
-            maxRowW = Math.max(maxRowW, symmetricRowWidth);
-          }
-          let rowH = 0;
-          row.forEach((c: any) => (rowH = Math.max(rowH, c._h)));
-          totalBlockH += rowH;
-        });
-        totalBlockH += (rows.length - 1) * (layoutType === 'grid' ? GRID_GAP : GAP_V);
-        node._w = Math.max(CARD_WIDTH, maxRowW);
-        node._h = CARD_HEIGHT + GAP_V + totalBlockH;
-      }
-    });
-
-    // 2. Pre-Order Traversal (Top-Down): Assign absolute coordinates
-    const positionNode = (node: any, x: number, y: number) => {
-      node.x = x;
-      node.y = y;
-      if (!node.children || node.children.length === 0) return;
-
-      if (node._layout === 'row') {
-        const children = node.children;
-        let totalChildrenWidth = 0;
-        children.forEach((c: any, i: number) => {
-          totalChildrenWidth += c._w;
-          if (i < children.length - 1) totalChildrenWidth += GAP_H;
-        });
-        let currentX = x - totalChildrenWidth / 2;
-        const childY = y + CARD_HEIGHT + GAP_V;
-        children.forEach((child: any) => {
-          const childX = currentX + child._w / 2;
-          positionNode(child, childX, childY);
-          currentX += child._w + GAP_H;
-        });
-      } else {
-        let currentY = y + CARD_HEIGHT + GAP_V;
-        const rows = node._rows;
-        const gapType = node._layout === 'grid' ? GRID_GAP : GAP_H;
-        const vGap = node._layout === 'grid' ? GRID_GAP : GAP_V;
-
-        rows.forEach((row: any[], rowIndex: number) => {
-          let rowH = 0;
-          row.forEach((c) => (rowH = Math.max(rowH, c._h)));
-          const isLastRow = rowIndex === rows.length - 1;
-
-          if (isLastRow && row.length === 1) {
-            const child = row[0];
-            positionNode(child, x, currentY);
-          } else {
-            const mid = Math.ceil(row.length / 2);
-            const leftGroup = row.slice(0, mid);
-            const rightGroup = row.slice(mid);
-            let wLeft = 0;
-            leftGroup.forEach((c: any, i: number) => {
-              wLeft += c._w;
-              if (i < leftGroup.length - 1) wLeft += gapType;
-            });
-            let leftStartX = x - CHANNEL_WIDTH / 2 - wLeft;
-            leftGroup.forEach((child: any) => {
-              const childX = leftStartX + child._w / 2;
-              positionNode(child, childX, currentY);
-              leftStartX += child._w + gapType;
-            });
-            let rightStartX = x + CHANNEL_WIDTH / 2;
-            rightGroup.forEach((child: any) => {
-              const childX = rightStartX + child._w / 2;
-              positionNode(child, childX, currentY);
-              rightStartX += child._w + gapType;
-            });
-          }
-          currentY += rowH + vGap;
-        });
-      }
+  private buildChildSelections(frontiers: LayoutVariant[][]): LayoutVariant[][] {
+    const selections = new Map<string, LayoutVariant[]>();
+    const add = (variants: LayoutVariant[]) => {
+      const key = variants.map((variant) => variant.signature).join('\u0001');
+      if (!selections.has(key)) selections.set(key, variants);
     };
 
-    positionNode(root, 0, 0);
+    for (const profile of ASPECT_PROFILES) {
+      add(frontiers.map((frontier) => this.selectVariant(frontier, profile)));
+    }
+    add(frontiers.map((frontier) => this.minVariant(frontier, (variant) =>
+      variant.physicalWidth * variant.physicalHeight,
+    )));
+    add(frontiers.map((frontier) => this.minVariant(frontier, (variant) =>
+      variant.physicalWidth,
+    )));
+    add(frontiers.map((frontier) => this.minVariant(frontier, (variant) =>
+      variant.physicalHeight,
+    )));
+
+    return Array.from(selections.values());
+  }
+
+  /** Partition child indexes into contiguous rows; source order is immutable. */
+  private generatePartitions(
+    variants: LayoutVariant[],
+    direction: LayoutDirection,
+  ): number[][][] {
+    const count = variants.length;
+    if (count <= 1) return [[[0]]];
+
+    const partitions = new Map<string, number[][]>();
+    const add = (rows: number[][]) => {
+      const key = rows.map((row) => row.length).join(',');
+      if (!partitions.has(key)) partitions.set(key, rows);
+    };
+
+    if (count <= EXHAUSTIVE_PARTITION_CHILD_LIMIT) {
+      const breakCount = count - 1;
+      for (let mask = 0; mask < 2 ** breakCount; mask++) {
+        const rows: number[][] = [[]];
+        for (let index = 0; index < count; index++) {
+          rows[rows.length - 1]!.push(index);
+          if (index < count - 1 && (mask & (1 << index)) !== 0) rows.push([]);
+        }
+        add(rows);
+      }
+      return Array.from(partitions.values());
+    }
+
+    add([Array.from({ length: count }, (_, index) => index)]);
+    add(Array.from({ length: count }, (_, index) => [index]));
+    const maxRows = Math.min(8, count - 1);
+    for (let rowCount = 2; rowCount <= maxRows; rowCount++) {
+      add(this.partitionByCount(count, rowCount));
+      add(this.partitionByBreadth(variants, rowCount, direction));
+    }
+    return Array.from(partitions.values());
+  }
+
+  private partitionByCount(count: number, rowCount: number): number[][] {
+    const rows: number[][] = [];
+    let start = 0;
+    for (let row = 0; row < rowCount; row++) {
+      const remaining = count - start;
+      const rowsLeft = rowCount - row;
+      const size = Math.ceil(remaining / rowsLeft);
+      rows.push(Array.from({ length: size }, (_, offset) => start + offset));
+      start += size;
+    }
+    return rows;
+  }
+
+  private partitionByBreadth(
+    variants: LayoutVariant[],
+    rowCount: number,
+    direction: LayoutDirection,
+  ): number[][] {
+    const logicalBreadths = variants.map((variant) =>
+      direction === LayoutDirection.LeftRight
+        ? variant.physicalHeight
+        : variant.physicalWidth,
+    );
+    const target = logicalBreadths.reduce((sum, width) => sum + width, 0) / rowCount;
+    const rows: number[][] = [];
+    let current: number[] = [];
+    let currentWidth = 0;
+    for (let index = 0; index < variants.length; index++) {
+      const rowsLeftAfterThis = rowCount - rows.length - 1;
+      const childrenAfterThis = variants.length - index - 1;
+      const width = logicalBreadths[index]!;
+      if (
+        current.length > 0 &&
+        rows.length < rowCount - 1 &&
+        currentWidth + width > target &&
+        childrenAfterThis >= rowsLeftAfterThis
+      ) {
+        rows.push(current);
+        current = [];
+        currentWidth = 0;
+      }
+      current.push(index);
+      currentWidth += width;
+    }
+    if (current.length > 0) rows.push(current);
+    while (rows.length < rowCount) {
+      const donor = rows.findIndex((row) => row.length > 1);
+      if (donor < 0) break;
+      const moved = rows[donor]!.pop()!;
+      rows.splice(donor + 1, 0, [moved]);
+    }
+    return rows;
+  }
+
+  private composeVariant(
+    node: HierarchyNode,
+    children: LayoutVariant[],
+    rowIndexes: number[][],
+    direction: LayoutDirection,
+    branchGap: number,
+  ): LayoutVariant {
+    const cardBreadth = direction === LayoutDirection.LeftRight ? CARD_HEIGHT : CARD_WIDTH;
+    const cardDepth = direction === LayoutDirection.LeftRight ? CARD_WIDTH : CARD_HEIGHT;
+    const placements = new Map<HierarchyNode, LogicalPoint>([[node, { breadth: 0, depth: 0 }]]);
+    const rects: LogicalRect[] = [{
+      id: String(node.data.id),
+      minBreadth: -cardBreadth / 2,
+      maxBreadth: cardBreadth / 2,
+      minDepth: 0,
+      maxDepth: cardDepth,
+    }];
+    const routes = new Map<string, LogicalPoint[]>();
+    const rowsByParent = new Map<string, string[][]>();
+    const childRows = rowIndexes.map((row) =>
+      row.map((index) => String((node.children ?? [])[index]!.data.id)),
+    );
+    rowsByParent.set(String(node.data.id), childRows);
+
+    let rowTop = cardDepth + LEVEL_GAP;
+    let connectorLength = 0;
+    let nestedRowCount = 0;
+
+    for (let rowIndex = 0; rowIndex < rowIndexes.length; rowIndex++) {
+      const indexes = rowIndexes[rowIndex]!;
+      const rowVariants = indexes.map((index) => children[index]!);
+      const requiresThroughChannel = rowIndex < rowIndexes.length - 1;
+      const offsets = this.packRow(
+        rowVariants,
+        branchGap,
+        requiresThroughChannel,
+      );
+      let rowHeight = 0;
+
+      for (let localIndex = 0; localIndex < indexes.length; localIndex++) {
+        const childIndex = indexes[localIndex]!;
+        const childNode = (node.children ?? [])[childIndex]!;
+        const child = children[childIndex]!;
+        const breadthOffset = offsets[localIndex]!;
+        rowHeight = Math.max(rowHeight, child.logicalHeight);
+        nestedRowCount += child.rowCount;
+        connectorLength += child.connectorLength;
+
+        for (const [placedNode, point] of child.placements) {
+          placements.set(placedNode, {
+            breadth: point.breadth + breadthOffset,
+            depth: point.depth + rowTop,
+          });
+        }
+        for (const rect of child.rects) {
+          rects.push({
+            ...rect,
+            minBreadth: rect.minBreadth + breadthOffset,
+            maxBreadth: rect.maxBreadth + breadthOffset,
+            minDepth: rect.minDepth + rowTop,
+            maxDepth: rect.maxDepth + rowTop,
+          });
+        }
+        for (const [key, route] of child.routes) {
+          routes.set(key, route.map((point) => ({
+            breadth: point.breadth + breadthOffset,
+            depth: point.depth + rowTop,
+          })));
+        }
+        for (const [parentId, rows] of child.rowsByParent) {
+          rowsByParent.set(parentId, rows.map((row) => [...row]));
+        }
+
+        const source = { breadth: 0, depth: cardDepth };
+        const target = { breadth: breadthOffset, depth: rowTop };
+        const route = this.parentChildRoute(source, target);
+        routes.set(this.linkKey(node, childNode), route);
+        connectorLength += this.routeLength(route);
+      }
+
+      rowTop += rowHeight + LEVEL_GAP;
+    }
+
+    const signature = `N:${node.data.id}[${rowIndexes
+      .map((row) => row.length)
+      .join('.')}](${children.map((child) => child.signature).join('|')})`;
+    return this.finalizeVariant(
+      {
+        placements,
+        rects,
+        routes,
+        rowsByParent,
+        connectorLength,
+        rowCount: rowIndexes.length + nestedRowCount,
+        signature,
+      },
+      direction,
+    );
+  }
+
+  private packRow(
+    variants: LayoutVariant[],
+    branchGap: number,
+    requiresThroughChannel: boolean,
+  ): number[] {
+    if (variants.length === 1 && !requiresThroughChannel) return [0];
+    if (!requiresThroughChannel) {
+      const offsets = this.packSequentially(variants, branchGap);
+      const center = (offsets[0]! + offsets[offsets.length - 1]!) / 2;
+      return offsets.map((offset) => offset - center);
+    }
+
+    const split = Math.ceil(variants.length / 2);
+    const left = variants.slice(0, split);
+    const right = variants.slice(split);
+    const channelHalf = Math.max(LINK_CHANNEL_WIDTH, branchGap) / 2;
+    const offsets = new Array<number>(variants.length);
+
+    const leftOffsets = this.packSequentially(left, branchGap);
+    const leftMax = Math.max(...left.map((variant, index) =>
+      leftOffsets[index]! + variant.maxBreadth,
+    ));
+    const leftShift = -channelHalf - leftMax;
+    for (let index = 0; index < left.length; index++) {
+      offsets[index] = leftOffsets[index]! + leftShift;
+    }
+
+    if (right.length > 0) {
+      const rightOffsets = this.packSequentially(right, branchGap);
+      const rightMin = Math.min(...right.map((variant, index) =>
+        rightOffsets[index]! + variant.minBreadth,
+      ));
+      const rightShift = channelHalf - rightMin;
+      for (let index = 0; index < right.length; index++) {
+        offsets[split + index] = rightOffsets[index]! + rightShift;
+      }
+    }
+    return offsets;
+  }
+
+  private packSequentially(
+    variants: LayoutVariant[],
+    branchGap: number,
+  ): number[] {
+    if (variants.length === 0) return [];
+    const offsets = [0];
+    const accumulated: LogicalRect[] = variants[0]!.rects.map((rect) => ({ ...rect }));
+
+    for (let index = 1; index < variants.length; index++) {
+      const variant = variants[index]!;
+      let required = -Infinity;
+      for (const leftRect of accumulated) {
+        for (const rightRect of variant.rects) {
+          if (
+            leftRect.minDepth < rightRect.maxDepth - 0.001 &&
+            leftRect.maxDepth > rightRect.minDepth + 0.001
+          ) {
+            required = Math.max(
+              required,
+              leftRect.maxBreadth + branchGap - rightRect.minBreadth,
+            );
+          }
+        }
+      }
+      const offset = Number.isFinite(required) ? required : 0;
+      offsets.push(offset);
+      accumulated.push(...variant.rects.map((rect) => ({
+        ...rect,
+        minBreadth: rect.minBreadth + offset,
+        maxBreadth: rect.maxBreadth + offset,
+      })));
+    }
+    return offsets;
+  }
+
+  private parentChildRoute(
+    source: LogicalPoint,
+    target: LogicalPoint,
+  ): LogicalPoint[] {
+    if (Math.abs(source.breadth - target.breadth) < 0.001) {
+      return [source, target];
+    }
+    const channelDepth = target.depth - LEVEL_GAP / 2;
+    return [
+      source,
+      { breadth: source.breadth, depth: channelDepth },
+      { breadth: target.breadth, depth: channelDepth },
+      target,
+    ];
+  }
+
+  private finalizeVariant(
+    partial: Omit<LayoutVariant,
+      | 'minBreadth'
+      | 'maxBreadth'
+      | 'minDepth'
+      | 'maxDepth'
+      | 'logicalWidth'
+      | 'logicalHeight'
+      | 'physicalWidth'
+      | 'physicalHeight'
+    >,
+    direction: LayoutDirection,
+  ): LayoutVariant {
+    const minBreadth = Math.min(...partial.rects.map((rect) => rect.minBreadth));
+    const maxBreadth = Math.max(...partial.rects.map((rect) => rect.maxBreadth));
+    const minDepth = Math.min(...partial.rects.map((rect) => rect.minDepth));
+    const maxDepth = Math.max(...partial.rects.map((rect) => rect.maxDepth));
+    const logicalWidth = maxBreadth - minBreadth;
+    const logicalHeight = maxDepth - minDepth;
+    return {
+      ...partial,
+      minBreadth,
+      maxBreadth,
+      minDepth,
+      maxDepth,
+      logicalWidth,
+      logicalHeight,
+      physicalWidth: direction === LayoutDirection.LeftRight ? logicalHeight : logicalWidth,
+      physicalHeight: direction === LayoutDirection.LeftRight ? logicalWidth : logicalHeight,
+    };
+  }
+
+  private pruneVariants(variants: LayoutVariant[]): LayoutVariant[] {
+    const bySignature = new Map<string, LayoutVariant>();
+    for (const variant of variants) bySignature.set(variant.signature, variant);
+    const unique = Array.from(bySignature.values());
+    if (unique.length <= MAX_VARIANTS_PER_NODE) {
+      return unique.sort((a, b) => a.signature.localeCompare(b.signature));
+    }
+
+    const kept = new Map<string, LayoutVariant>();
+    const add = (variant: LayoutVariant) => kept.set(variant.signature, variant);
+    add(this.minVariant(unique, (variant) => variant.physicalWidth * variant.physicalHeight));
+    add(this.minVariant(unique, (variant) => variant.physicalWidth));
+    add(this.minVariant(unique, (variant) => variant.physicalHeight));
+    add(this.minVariant(unique, (variant) => variant.connectorLength));
+
+    for (const profile of ASPECT_PROFILES) {
+      const ranked = [...unique].sort((a, b) =>
+        this.compareForTarget(a, b, profile),
+      );
+      for (const variant of ranked.slice(0, 2)) add(variant);
+    }
+
+    if (kept.size < MAX_VARIANTS_PER_NODE) {
+      const remaining = [...unique].sort((a, b) =>
+        (a.physicalWidth * a.physicalHeight) - (b.physicalWidth * b.physicalHeight) ||
+        a.signature.localeCompare(b.signature),
+      );
+      for (const variant of remaining) {
+        add(variant);
+        if (kept.size >= MAX_VARIANTS_PER_NODE) break;
+      }
+    }
+    return Array.from(kept.values()).sort((a, b) => a.signature.localeCompare(b.signature));
+  }
+
+  private selectVariant(variants: LayoutVariant[], target: number): LayoutVariant {
+    return [...variants].sort((a, b) => this.compareForTarget(a, b, target))[0]!;
+  }
+
+  private compareForTarget(
+    a: LayoutVariant,
+    b: LayoutVariant,
+    target: number,
+  ): number {
+    const aError = this.ratioError(a, target);
+    const bError = this.ratioError(b, target);
+    const aWithinTolerance = aError <= RATIO_TOLERANCE;
+    const bWithinTolerance = bError <= RATIO_TOLERANCE;
+    if (aWithinTolerance !== bWithinTolerance) return aWithinTolerance ? -1 : 1;
+    if (!aWithinTolerance && Math.abs(aError - bError) > 1e-9) return aError - bError;
+
+    const aArea = a.physicalWidth * a.physicalHeight;
+    const bArea = b.physicalWidth * b.physicalHeight;
+    return aArea - bArea ||
+      a.connectorLength - b.connectorLength ||
+      a.rowCount - b.rowCount ||
+      a.signature.localeCompare(b.signature);
+  }
+
+  private ratioError(variant: LayoutVariant, target: number): number {
+    const ratio = variant.physicalWidth / variant.physicalHeight;
+    return Math.abs(Math.log(ratio / target));
+  }
+
+  private minVariant(
+    variants: LayoutVariant[],
+    metric: (variant: LayoutVariant) => number,
+  ): LayoutVariant {
+    return [...variants].sort((a, b) =>
+      metric(a) - metric(b) || a.signature.localeCompare(b.signature),
+    )[0]!;
+  }
+
+  private toPhysicalPoint(
+    point: LogicalPoint,
+    direction: LayoutDirection,
+  ): LayoutPoint {
+    if (direction === LayoutDirection.LeftRight) {
+      return {
+        x: point.depth - CARD_WIDTH / 2,
+        y: point.breadth + CARD_HEIGHT / 2,
+      };
+    }
+    return { x: point.breadth, y: point.depth };
+  }
+
+  private computeFrameBounds(bounds: LayoutBounds, target: number): LayoutBounds {
+    let minX = bounds.minX - EXPORT_PADDING;
+    let maxX = bounds.maxX + EXPORT_PADDING;
+    let minY = bounds.minY - EXPORT_PADDING;
+    let maxY = bounds.maxY + EXPORT_PADDING;
+    const width = maxX - minX;
+    const height = maxY - minY;
+    const current = width / height;
+    if (current < target) {
+      const extra = (target * height - width) / 2;
+      minX -= extra;
+      maxX += extra;
+    } else if (current > target) {
+      const extra = (width / target - height) / 2;
+      minY -= extra;
+      maxY += extra;
+    }
+    return {
+      minX,
+      maxX,
+      minY,
+      maxY,
+      treeWidth: maxX - minX,
+      treeHeight: maxY - minY,
+    };
+  }
+
+  private routeLength(route: readonly LogicalPoint[]): number {
+    let length = 0;
+    for (let index = 1; index < route.length; index++) {
+      length += Math.abs(route[index]!.breadth - route[index - 1]!.breadth);
+      length += Math.abs(route[index]!.depth - route[index - 1]!.depth);
+    }
+    return length;
+  }
+
+  private linkKey(source: HierarchyNode, target: HierarchyNode): string {
+    return `${String(source.data.id)}\u0000${String(target.data.id)}`;
+  }
+
+  private clampBranchGap(branchGap: number): number {
+    if (!Number.isFinite(branchGap)) return DEFAULT_BRANCH_GAP;
+    return Math.max(MIN_BRANCH_GAP, Math.min(MAX_BRANCH_GAP, branchGap));
+  }
+
+  private clampTargetRatio(targetAspectRatio: number): number {
+    if (!Number.isFinite(targetAspectRatio)) return DEFAULT_TARGET_ASPECT_RATIO;
+    return Math.max(
+      MIN_TARGET_ASPECT_RATIO,
+      Math.min(MAX_TARGET_ASPECT_RATIO, targetAspectRatio),
+    );
   }
 }

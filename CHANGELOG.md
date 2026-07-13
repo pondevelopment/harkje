@@ -25,7 +25,7 @@ and adheres to [Semantic Versioning](https://semver.org/) once it starts tagging
   was dropped.
 - **GitHub Pages deploy workflow** (`.github/workflows/deploy-pages.yml`)
   now builds with `npm run build -- --base-href=/<repo>/` and uploads
-  `dist/harkje` (was `dist/` with Vite `--base`).
+  `dist/harkje/browser` (was `dist/` with Vite `--base`).
 - A new `prebuild` step (`scripts/generate-build-info.mjs`) writes
   `src/environments/build-info.ts` from the current git sha + timestamp before
   every build; in dev an `angular.json` `fileReplacements` swap-in a placeholder.
@@ -36,9 +36,12 @@ and adheres to [Semantic Versioning](https://semver.org/) once it starts tagging
 - **CSV editor**: a new `csv-editor-tab.component.ts` + `csv-parser.service.ts`
   provide import/export of the org as CSV with validation. The sidebar now has
   three editor tabs — Generator, JSON, and CSV.
-- **Compact layout** control: the toolbar gained a "Compact layout" button that
-  runs `OrgChartComponent.runCompaction()` to reduce whitespace after
-  collapsing nodes.
+- **Adaptive contour layout**: the engine generates fixed-gap ordered row
+  variants and selects the topology closest to the requested aspect ratio.
+  Aspect ratio now recomputes the arrangement instead of stretching distances;
+  branch spacing independently controls minimum contour clearance. Complete
+  subtrees move rigidly and connectors use reserved channels. The former
+  one-shot compaction control is no longer needed.
 - **Sidebar resize / collapse**: the sidebar can be dragged to resize,
   collapsed/expanded via a grip toggle, and toggled on/off with the menu button
   on mobile.

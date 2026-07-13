@@ -13,7 +13,7 @@ You are working in **Harkje**, a small **Angular + TypeScript** app that generat
 
 - Install: `npm install`
 - Dev server: `npm run dev` (Angular CLI `ng serve`; default http://localhost:4200)
-- Production build: `npm run build` (Angular CLI `ng build`, outputs to `dist/harkje/`)
+- Production build: `npm run build` (Angular CLI `ng build`, browser bundle in `dist/harkje/browser/`)
 - Watch build: `npm run watch`
 
 GitHub Pages deploy (workflow): build is executed as `npm run build -- --base-href=/<repo>/`.
@@ -57,9 +57,9 @@ Icon-name differences vs. lucide-react: `Loader` (no `Loader2`), `Wand` (no `Wan
   - `json-editor-tab.component.ts` — flat JSON list editor
   - `csv-editor-tab.component.ts` — CSV editor
 - Renderer + export: `src/app/components/org-chart/org-chart.component.ts`
-  - D3 SVG render, zoom/pan, click-to-collapse, PNG export, compaction animation
+  - D3 SVG render, zoom/pan, click-to-collapse, PNG export
 - Layout engine (pure logic, no Angular): `src/app/core/org-layout.service.ts`
-  - `computeBalancedLayout()`, `compactLayoutOneShot()`, `buildLinkPath()`, ...
+  - `computeTidyLayout()`, `buildLinkRoute()`, `buildLinkPath()`, ...
 - Tree <-> flat conversion: `src/app/core/org-tree.service.ts`
   - `flattenTree()` converts `OrgNode` -> `FlatNode[]`
   - `buildTree()` converts `FlatNode[]` -> `OrgNode`
@@ -126,9 +126,17 @@ When adding fields to nodes:
 - Collapse behavior is tracked by `collapsedKeys: OrgChartNodeKeys` (PrimeNG-style:
   key present + truthy = collapsed); clicking a node toggles collapse only if it had
   children in the original data.
-- Zoom transform is preserved across re-renders unless the `value` input identity changes.
-- `OrgChartComponent` exposes imperative `exportImage()` and `runCompaction()` methods
-  callable via `@ViewChild` (the app shell wires these to toolbar buttons).
+- Zoom transform is preserved across collapse/theme re-renders. Data identity,
+  direction, branch spacing, or target aspect-ratio changes trigger auto-fit.
+- Preserve source child order row-major. Compact by translating complete subtrees
+  until their adjacent contours reach the configured branch gap; never add
+  person-specific offsets.
+- Target aspect ratio must select a discrete layout topology; it must never scale
+  coordinates or change card/branch/level gaps. One-row candidates are strict
+  layered layouts; wrapped candidates use explicit aligned row bands.
+- Orthogonal connectors must remain inside reserved inter-level/row channels and
+  clear every unrelated card.
+- `OrgChartComponent` exposes imperative `exportImage()` via `@ViewChild`.
 
 ## Dependency guidance
 

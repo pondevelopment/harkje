@@ -36,8 +36,12 @@ type OrgSize = 'small' | 'medium' | 'large';
           collapse/expand their team.
         </li>
         <li>
-          Use <strong>Aspect Ratio</strong> to influence how wide vs. tall the
-          layout tries to be (lower = taller/narrower, higher = wider/flatter).
+          Use <strong>Aspect Ratio</strong> to adapt the organogram to a slide,
+          document, screen, or other communication format.
+        </li>
+        <li>
+          Use <strong>Branch spacing</strong> to adjust the clear space between
+          neighboring teams independently from the communication-format target.
         </li>
         <li>
           Use <strong>Download image</strong> (top-right) to export a PNG for

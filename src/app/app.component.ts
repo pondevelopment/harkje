@@ -12,13 +12,21 @@ import {
 import { LucideAngularModule, Menu, X, Ratio, Download } from 'lucide-angular';
 import { LayoutDirection, OrgChartNodeKeys, OrgNode } from './models/org.types';
 import { ThemeService } from './core/theme.service';
+import {
+  DEFAULT_BRANCH_GAP,
+  DEFAULT_TARGET_ASPECT_RATIO,
+  MAX_BRANCH_GAP,
+  MAX_TARGET_ASPECT_RATIO,
+  MIN_BRANCH_GAP,
+  MIN_TARGET_ASPECT_RATIO,
+} from './core/org-layout.service';
 import { INITIAL_DATA } from './constants/initial-data';
 import { InputPanelComponent } from './components/input-panel/input-panel.component';
 import { OrgChartComponent } from './components/org-chart/org-chart.component';
 
 /**
  * App shell: sidebar (InputPanel) + main chart area (OrgChart), with toolbar
- * (theme selects, aspect ratio slider, download, compact) and a draggable
+ * (theme selectors, aspect ratio, branch spacing, download) and a draggable
  * sidebar resize handle. State is held in signals; zoneless change detection.
  */
 @Component({
@@ -112,16 +120,38 @@ import { OrgChartComponent } from './components/org-chart/org-chart.component';
             <div class="ratio-row">
               <input
                 type="range"
-                min="0.25"
-                max="4"
+                [min]="MIN_TARGET_ASPECT_RATIO"
+                [max]="MAX_TARGET_ASPECT_RATIO"
                 step="0.05"
                 [value]="targetAspectRatioUi()"
                 (input)="onAspectRatioInput($event)"
                 (pointerup)="commitAspectRatio()"
                 (pointercancel)="commitAspectRatio()"
                 (blur)="commitAspectRatio()"
+                aria-label="Target organogram aspect ratio"
               />
               <span class="ratio-value">{{ targetAspectRatioUi().toFixed(2) }}</span>
+            </div>
+          </div>
+
+          <div class="tool tool--spacing">
+            <div class="spacing-header">
+              <span>Branch spacing</span>
+            </div>
+            <div class="spacing-row">
+              <input
+                type="range"
+                [min]="MIN_BRANCH_GAP"
+                [max]="MAX_BRANCH_GAP"
+                step="2"
+                [value]="branchGapUi()"
+                (input)="onBranchGapInput($event)"
+                (pointerup)="commitBranchGap()"
+                (pointercancel)="commitBranchGap()"
+                (blur)="commitBranchGap()"
+                aria-label="Minimum spacing between branches"
+              />
+              <span class="spacing-value">{{ branchGapUi().toFixed(0) }} px</span>
             </div>
           </div>
 
@@ -135,14 +165,6 @@ import { OrgChartComponent } from './components/org-chart/org-chart.component';
             <span>Download image</span>
           </button>
 
-          <button
-            type="button"
-            class="tool tool--btn"
-            (click)="handleCompact()"
-            title="Run an optional compaction pass to reduce whitespace"
-          >
-            <span>Compact layout</span>
-          </button>
         </div>
 
         <div
@@ -156,6 +178,7 @@ import { OrgChartComponent } from './components/org-chart/org-chart.component';
             [(collapsedKeys)]="collapsedKeys"
             [chartThemeId]="themeService.chartThemeId()"
             [direction]="LayoutDirection.TopDown"
+            [branchGap]="branchGap()"
             [targetAspectRatio]="targetAspectRatio()"
           />
         </div>
@@ -168,6 +191,10 @@ import { OrgChartComponent } from './components/org-chart/org-chart.component';
 export class AppComponent implements OnInit, OnDestroy {
   readonly themeService = inject(ThemeService);
   private readonly zone = inject(NgZone);
+  readonly MIN_BRANCH_GAP = MIN_BRANCH_GAP;
+  readonly MAX_BRANCH_GAP = MAX_BRANCH_GAP;
+  readonly MIN_TARGET_ASPECT_RATIO = MIN_TARGET_ASPECT_RATIO;
+  readonly MAX_TARGET_ASPECT_RATIO = MAX_TARGET_ASPECT_RATIO;
 
   @ViewChild('chart', { static: false })
   chartRef?: OrgChartComponent;
@@ -192,8 +219,11 @@ export class AppComponent implements OnInit, OnDestroy {
 
   readonly sidebarWidth = signal<number>(this.DEFAULT_SIDEBAR_WIDTH);
 
-  readonly targetAspectRatio = signal<number>(1);
-  readonly targetAspectRatioUi = signal<number>(1);
+  readonly branchGap = signal<number>(DEFAULT_BRANCH_GAP);
+  readonly branchGapUi = signal<number>(DEFAULT_BRANCH_GAP);
+  private branchGapCommitTimeout: number | null = null;
+  readonly targetAspectRatio = signal<number>(DEFAULT_TARGET_ASPECT_RATIO);
+  readonly targetAspectRatioUi = signal<number>(DEFAULT_TARGET_ASPECT_RATIO);
   private ratioCommitTimeout: number | null = null;
 
   private resizing = false;
@@ -216,6 +246,9 @@ export class AppComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.cleanupResizeListeners();
+    if (this.branchGapCommitTimeout !== null) {
+      clearTimeout(this.branchGapCommitTimeout);
+    }
     if (this.ratioCommitTimeout !== null) {
       clearTimeout(this.ratioCommitTimeout);
     }
@@ -291,6 +324,30 @@ export class AppComponent implements OnInit, OnDestroy {
     document.body.style.userSelect = '';
   }
 
+  onBranchGapInput(e: Event): void {
+    const next = parseFloat((e.target as HTMLInputElement).value);
+    this.branchGapUi.set(next);
+    this.scheduleBranchGapCommit(next);
+  }
+
+  private scheduleBranchGapCommit(value: number): void {
+    if (this.branchGapCommitTimeout !== null) {
+      clearTimeout(this.branchGapCommitTimeout);
+    }
+    this.branchGapCommitTimeout = window.setTimeout(() => {
+      this.branchGapCommitTimeout = null;
+      this.branchGap.set(value);
+    }, 120);
+  }
+
+  commitBranchGap(): void {
+    if (this.branchGapCommitTimeout !== null) {
+      clearTimeout(this.branchGapCommitTimeout);
+      this.branchGapCommitTimeout = null;
+    }
+    this.branchGap.set(this.branchGapUi());
+  }
+
   onAspectRatioInput(e: Event): void {
     const next = parseFloat((e.target as HTMLInputElement).value);
     this.targetAspectRatioUi.set(next);
@@ -317,9 +374,5 @@ export class AppComponent implements OnInit, OnDestroy {
 
   handleDownload(): void {
     this.chartRef?.exportImage();
-  }
-
-  handleCompact(): void {
-    this.chartRef?.runCompaction();
   }
 }

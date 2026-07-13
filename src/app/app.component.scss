@@ -165,13 +165,15 @@
   cursor: pointer;
 }
 
-.tool--ratio {
+.tool--ratio,
+.tool--spacing {
   flex-direction: column;
   align-items: stretch;
   min-width: 200px;
 }
 
-.ratio-header {
+.ratio-header,
+.spacing-header {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -180,21 +182,24 @@
   font-weight: 500;
 }
 
-.ratio-row {
+.ratio-row,
+.spacing-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.ratio-row input[type='range'] {
+.ratio-row input[type='range'],
+.spacing-row input[type='range'] {
   flex: 1;
   accent-color: var(--ui-accent, #2563eb);
 }
 
-.ratio-value {
+.ratio-value,
+.spacing-value {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-  min-width: 40px;
+  min-width: 44px;
   text-align: right;
 }
 
@@ -252,7 +257,8 @@
     padding: 12px 16px;
     gap: 12px;
   }
-  .tool--ratio {
+  .tool--ratio,
+  .tool--spacing {
     min-width: 140px;
   }
 }
