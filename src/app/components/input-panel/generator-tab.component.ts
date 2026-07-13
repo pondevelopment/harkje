@@ -3,15 +3,19 @@ import {
   Component,
   EventEmitter,
   Output,
+  computed,
   inject,
   signal,
 } from '@angular/core';
 import { LucideAngularModule, Loader, Wand, Dices } from 'lucide-angular';
 import { OrgNode } from '../../models/org.types';
-import { OrgGeneratorService } from '../../core/org-generator.service';
+import {
+  ORG_SIZE_RANGES,
+  ORG_SIZES,
+  OrgGeneratorService,
+  OrgSize,
+} from '../../core/org-generator.service';
 import { OrgTreeService } from '../../core/org-tree.service';
-
-type OrgSize = 'small' | 'medium' | 'large';
 
 /**
  * "Generator" tab: one-click random org generation by size.
@@ -36,12 +40,8 @@ type OrgSize = 'small' | 'medium' | 'large';
           collapse/expand their team.
         </li>
         <li>
-          Use <strong>Aspect Ratio</strong> to adapt the organogram to a slide,
-          document, screen, or other communication format.
-        </li>
-        <li>
-          Use <strong>Branch spacing</strong> to adjust the clear space between
-          neighboring teams independently from the communication-format target.
+          Use <strong>Aspect Ratio</strong> to influence how wide vs. tall the
+          layout tries to be (lower = taller/narrower, higher = wider/flatter).
         </li>
         <li>
           Use <strong>Download image</strong> (top-right) to export a PNG for
@@ -73,9 +73,7 @@ type OrgSize = 'small' | 'medium' | 'large';
             }
           </div>
           <p class="size-hint">
-            @if (quickSize() === 'small') { ~5-8 nodes }
-            @if (quickSize() === 'medium') { ~15-20 nodes }
-            @if (quickSize() === 'large') { ~30-40 nodes }
+            ~{{ selectedSizeRange().min }}–{{ selectedSizeRange().max }} nodes
           </p>
         </div>
 
@@ -110,8 +108,9 @@ export class GeneratorTabComponent {
   private readonly treeService = inject(OrgTreeService);
 
   readonly isLoading = signal(false);
-  readonly quickSize = signal<OrgSize>('medium');
-  readonly sizes: OrgSize[] = ['small', 'medium', 'large'];
+  readonly quickSize = signal<OrgSize>('M');
+  readonly sizes = ORG_SIZES;
+  readonly selectedSizeRange = computed(() => ORG_SIZE_RANGES[this.quickSize()]);
 
   private runId = 0;
 

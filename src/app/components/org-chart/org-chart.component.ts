@@ -23,9 +23,6 @@ import {
 import {
   CARD_HEIGHT,
   CARD_WIDTH,
-  DEFAULT_BRANCH_GAP,
-  DEFAULT_TARGET_ASPECT_RATIO,
-  LayoutResult,
   OrgLayoutService,
 } from '../../core/org-layout.service';
 
@@ -39,8 +36,7 @@ import {
  *   - `[collapsible]`  whether clicking a parent toggles collapse (default true)
  *   - `[(collapsedKeys)]` two-way collapsed-state map { id: true }
  *   - `[chartThemeId]` chart theme to apply on the container
- *   - `[branchGap]`     minimum clear gap between adjacent subtree contours
- *   - `[targetAspectRatio]` requested width/height communication format
+ *   - `[targetAspectRatio]` drives the row/grid/wrap layout decision
  *   - `[direction]`    layout direction (TopDown/LeftRight)
  *
  * Imperative methods (call via `@ViewChild`): `exportImage()`, `runCompaction()`.
@@ -69,7 +65,7 @@ import {
       </div>
       <div data-export-exclude="true" class="org-chart-pill org-chart-pill--right">
         <span class="org-chart-dot"></span>
-        Adaptive Layout Engine v6
+        Overlap-Free Engine v3 (Compact)
       </div>
     </div>
   `,
@@ -86,10 +82,8 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   readonly chartThemeId = input<ChartThemeId>('light');
   /** Layout direction. */
   readonly direction = input<LayoutDirection>(LayoutDirection.TopDown);
-  /** Clear breadth gap between adjacent cards/subtree contours, in pixels. */
-  readonly branchGap = input<number>(DEFAULT_BRANCH_GAP);
-  /** Requested width/height format; selects a discrete fixed-gap layout. */
-  readonly targetAspectRatio = input<number>(DEFAULT_TARGET_ASPECT_RATIO);
+  /** Target aspect ratio for the layout decision. */
+  readonly targetAspectRatio = input<number>(1);
 
   @ViewChild('container', { static: true })
   containerRef!: ElementRef<HTMLDivElement>;
@@ -110,14 +104,16 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   /** D3 selections + transform preserved across re-renders. */
   private g?: d3.Selection<SVGGElement, unknown, null, undefined>;
   private root?: d3.HierarchyNode<OrgNode>;
-  private layoutResult?: LayoutResult;
   private nodesSel?: d3.Selection<SVGGElement, any, SVGGElement, unknown>;
   private linksSel?: d3.Selection<SVGPathElement, any, SVGGElement, unknown>;
   private transform = d3.zoomIdentity;
   private prevData?: OrgNode;
-  private prevLayoutKey?: string;
 
+  /** Compaction animation state. */
+  private rafId: number | null = null;
   private zoomBehavior?: d3.ZoomBehavior<SVGSVGElement, unknown>;
+
+  private readonly PHYSICS_FRAMES = 90;
 
   constructor(private readonly layout: OrgLayoutService) {
     // Re-render whenever any layout-affecting input changes.
@@ -128,7 +124,6 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.collapsedKeys();
       this.chartThemeId();
       this.direction();
-      this.branchGap();
       this.targetAspectRatio();
       this.dimensions();
       untracked(() => this.render());
@@ -150,6 +145,7 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
 
   ngOnDestroy(): void {
     this.resizeObserver?.disconnect();
+    this.cancelRaf();
   }
 
   /** Export a PNG of the tight chart bounds (warmup + restore DOM). */
@@ -166,9 +162,10 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
       return;
     }
 
+    const padding = 40;
     const { minX, minY, treeWidth, treeHeight } = this.layoutBounds;
-    const exportWidth = Math.max(1, Math.ceil(treeWidth));
-    const exportHeight = Math.max(1, Math.ceil(treeHeight));
+    const exportWidth = Math.max(1, Math.ceil(treeWidth + padding * 2));
+    const exportHeight = Math.max(1, Math.ceil(treeHeight + padding * 2));
 
     const containerEl = this.containerRef.nativeElement;
     const prevContainerWidth = containerEl.style.width;
@@ -193,7 +190,7 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
       containerEl.style.backgroundColor = 'transparent';
       svgEl.setAttribute('width', String(exportWidth));
       svgEl.setAttribute('height', String(exportHeight));
-      gEl.setAttribute('transform', `translate(${-minX},${-minY})`);
+      gEl.setAttribute('transform', `translate(${padding - minX},${padding - minY})`);
 
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -245,16 +242,48 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
     }
   }
 
-  /** Deprecated compatibility alias; every render is already compact. */
+  /** Run an optional compaction pass to reduce whitespace (animated). */
   runCompaction(): void {
     if (!this.root) return;
-    this.layoutResult = this.layout.computeTidyLayout(
-      this.root,
-      this.direction(),
-      this.branchGap(),
-      this.targetAspectRatio(),
-    );
-    this.updateDrawing();
+    this.cancelRaf();
+
+    const root = this.root;
+    const nodes = root.descendants() as any[];
+    const dir = this.direction();
+    const axisKey: 'x' | 'y' = dir === LayoutDirection.LeftRight ? 'y' : 'x';
+
+    let frame = 0;
+    let stillFrames = 0;
+
+    const tick = () => {
+      const before = nodes.map((n) => (n[axisKey] ?? 0) as number);
+      this.layout.compactLayoutOneShot(root, dir);
+      const after = nodes.map((n) => (n[axisKey] ?? 0) as number);
+      let maxDelta = 0;
+      for (let i = 0; i < before.length; i++) {
+        maxDelta = Math.max(maxDelta, Math.abs((after[i] ?? 0) - (before[i] ?? 0)));
+      }
+      this.updateDrawing();
+
+      if (maxDelta < this.layout.physicsEpsilon) stillFrames++;
+      else stillFrames = 0;
+
+      frame++;
+      if (frame >= this.PHYSICS_FRAMES || stillFrames >= 8) {
+        this.rafId = null;
+        return;
+      }
+      this.rafId = requestAnimationFrame(tick);
+    };
+
+    this.rafId = requestAnimationFrame(tick);
+  }
+
+  private cancelRaf(): void {
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
   }
 
   private collapsedSet(): Set<string> {
@@ -270,17 +299,15 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
     const root = this.root;
     const nodesSel = this.nodesSel;
     const linksSel = this.linksSel;
-    const result = this.layoutResult;
-    if (!root || !nodesSel || !linksSel || !result) return;
-    linksSel.attr('d', (d: any) =>
-      this.layout.buildLinkPath(d, this.direction(), result.routes),
-    );
+    if (!root || !nodesSel || !linksSel) return;
+    const { rects, bounds } = this.layout.computeRectsAndBounds(root);
+    linksSel.attr('d', (d: any) => this.layout.buildLinkPath(d, rects, { minX: bounds.minX, maxX: bounds.maxX }));
     nodesSel.attr('transform', (d: any) => `translate(${d.x},${d.y})`);
     this.layoutBounds = {
-      minX: result.frameBounds.minX,
-      minY: result.frameBounds.minY,
-      treeWidth: result.frameBounds.treeWidth,
-      treeHeight: result.frameBounds.treeHeight,
+      minX: bounds.minX,
+      minY: bounds.minY,
+      treeWidth: bounds.treeWidth,
+      treeHeight: bounds.treeHeight,
     };
   }
 
@@ -296,7 +323,6 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     const { width, height } = this.dimensions();
     const root = d3.hierarchy<OrgNode>(data);
-    const layoutKey = `${this.direction()}|${this.branchGap()}|${this.targetAspectRatio()}`;
 
     // Apply collapse state
     const collapsed = this.collapsedSet();
@@ -306,18 +332,13 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
       }
     });
 
-    const result = this.layout.computeTidyLayout(
-      root,
-      this.direction(),
-      this.branchGap(),
-      this.targetAspectRatio(),
-    );
-    this.layoutResult = result;
+    this.layout.computeBalancedLayout(root, this.direction(), this.targetAspectRatio());
+    const { rects, bounds } = this.layout.computeRectsAndBounds(root);
     this.layoutBounds = {
-      minX: result.frameBounds.minX,
-      minY: result.frameBounds.minY,
-      treeWidth: result.frameBounds.treeWidth,
-      treeHeight: result.frameBounds.treeHeight,
+      minX: bounds.minX,
+      minY: bounds.minY,
+      treeWidth: bounds.treeWidth,
+      treeHeight: bounds.treeHeight,
     };
 
     const g = svg.append('g');
@@ -335,26 +356,19 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
     svg.call(zoom);
 
     // Determine zoom strategy
-    if (this.prevData !== data || this.prevLayoutKey !== layoutKey) {
+    if (this.prevData !== data) {
       const padding = 80;
       const availableW = width - padding * 2;
       const availableH = height - padding * 2;
-      const scale = Math.min(
-        1.2,
-        Math.min(
-          availableW / result.frameBounds.treeWidth,
-          availableH / result.frameBounds.treeHeight,
-        ),
-      );
-      const layoutCenterX = result.frameBounds.minX + result.frameBounds.treeWidth / 2;
-      const layoutCenterY = result.frameBounds.minY + result.frameBounds.treeHeight / 2;
+      const scale = Math.min(1.2, Math.min(availableW / bounds.treeWidth, availableH / bounds.treeHeight));
+      const layoutCenterX = bounds.minX + bounds.treeWidth / 2;
+      const layoutCenterY = bounds.minY + bounds.treeHeight / 2;
       const transformX = width / 2 - layoutCenterX * scale;
       const transformY = height / 2 - layoutCenterY * scale;
       const newTransform = d3.zoomIdentity.translate(transformX, transformY).scale(scale);
       svg.call(zoom.transform, newTransform);
       this.transform = newTransform;
       this.prevData = data;
-      this.prevLayoutKey = layoutKey;
     } else {
       svg.call(zoom.transform, this.transform);
     }
@@ -369,9 +383,7 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
       .attr('fill', 'none')
       .attr('stroke', chartLinkStroke)
       .attr('stroke-width', 1.5)
-      .attr('d', (d: any) =>
-        this.layout.buildLinkPath(d, this.direction(), result.routes),
-      );
+      .attr('d', (d: any) => this.layout.buildLinkPath(d, rects, { minX: bounds.minX, maxX: bounds.maxX }));
     this.linksSel = linksSel as any;
 
     // Draw nodes

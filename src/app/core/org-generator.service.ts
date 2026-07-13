@@ -1,7 +1,18 @@
 import { Injectable } from '@angular/core';
 import { FlatNode } from '../models/org.types';
 
-type OrgSize = 'small' | 'medium' | 'large';
+export const ORG_SIZES = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL'] as const;
+export type OrgSize = (typeof ORG_SIZES)[number];
+
+export const ORG_SIZE_RANGES = {
+  XXS: { min: 2, max: 4 },
+  XS: { min: 5, max: 8 },
+  S: { min: 9, max: 14 },
+  M: { min: 15, max: 20 },
+  L: { min: 30, max: 40 },
+  XL: { min: 50, max: 60 },
+  XXL: { min: 70, max: 80 },
+} as const satisfies Record<OrgSize, { min: number; max: number }>;
 
 /**
  * Deterministic local org generator (no external API).
@@ -104,9 +115,8 @@ export class OrgGeneratorService {
   };
 
   private sizeToCount = (rng: () => number, size: OrgSize): number => {
-    if (size === 'small') return this.randInt(rng, 5, 8);
-    if (size === 'medium') return this.randInt(rng, 15, 20);
-    return this.randInt(rng, 30, 40);
+    const range = ORG_SIZE_RANGES[size];
+    return this.randInt(rng, range.min, range.max);
   };
 
   private generateFlatOrg(rng: () => number, count: number, theme: string): FlatNode[] {

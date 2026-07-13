@@ -67,12 +67,9 @@ Key files:
   - `generator-tab.component.ts` — one-click random org by size
   - `json-editor-tab.component.ts` — flat JSON list editor
   - `csv-editor-tab.component.ts` — CSV editor
-- `src/app/components/org-chart/org-chart.component.ts`: D3 renderer + SVG rendering + export
+- `src/app/components/org-chart/org-chart.component.ts`: D3 renderer + SVG rendering + export + compaction
 - `src/app/core/org-layout.service.ts`: pure layout engine
-  - `computeTidyLayout()` generates fixed-gap row variants and selects the
-    topology closest to the requested aspect ratio.
-  - `buildLinkRoute()` / `buildLinkPath()` use each selected layout's reserved
-    connector channels.
+  - `computeBalancedLayout()`, `compactLayoutOneShot()`, `buildLinkPath()`, ...
 - `src/app/core/org-tree.service.ts`: tree <-> flat conversion
   - `flattenTree()` converts `OrgNode` → `FlatNode[]` for the editor.
   - `buildTree()` converts `FlatNode[]` → `OrgNode` for rendering.
@@ -135,7 +132,7 @@ Then open the dev server URL (default: `http://localhost:4200`).
 
 ```bash
 npm run dev      # Start dev server (ng serve, default http://localhost:4200)
-npm run build    # Production browser bundle to dist/harkje/browser/ (ng build)
+npm run build    # Production build to dist/harkje/ (ng build)
 npm run watch    # Watch build (development)
 npm test         # Run the Vitest test suite once
 ```
@@ -152,13 +149,17 @@ The generator lives in `src/app/core/org-generator.service.ts`. It exports:
 - `generateOrgStructure(description: string)`: produces a deterministic randomized org seeded by the description.
 - `generateRandomOrgStructure(size, theme, nonce)`: produces a deterministic randomized org based on size/theme/nonce.
 
+The available size buckets are XXS (~2–4 nodes), XS (~5–8), S (~9–14),
+M (~15–20), L (~30–40), XL (~50–60), and XXL (~70–80).
+
 Both return a `FlatNode[]` that forms a valid tree with exactly one root.
 
 ## Exporting the chart
 
-The chart component exposes an imperative export method (called via `@ViewChild`):
+The chart component exposes imperative methods (called via `@ViewChild`):
 
 - `exportImage()`: exports the current chart viewport to a PNG using `html-to-image`.
+- `runCompaction()`: runs an optional compaction pass to reduce whitespace.
 
 Export details:
 
@@ -174,18 +175,9 @@ The toolbar (top of the main area) provides:
 
 - Site theme selector (Light / Dark)
 - Chart theme selector (Light / Soft / Warm / Pencil / Classic / Dark / High Contrast)
-- Target aspect ratio slider: adapts the overall width/height to a communication format
-- Branch spacing slider: controls the safe minimum gap between neighboring subtree contours
+- Target aspect ratio slider: influences how the layout engine wraps/grids large child groups
 - Download image: exports a PNG
-
-The chart is automatically contour-packed; no manual compaction step is needed.
-Changing the target aspect ratio recomputes the layout and selects a different
-ordered row topology—it does not stretch coordinates or change gaps. Source
-child order is preserved row-major, and complete subtrees move as rigid units
-until adjacent contours reach the selected branch spacing. One-row candidates
-are strictly layered; portrait/wrapped candidates use explicit aligned row bands
-and reserved connector channels. The exported communication frame has the exact
-requested ratio. `TopDown` and `LeftRight` use the same selection rules.
+- Compact layout: runs an optional compaction pass to reduce whitespace
 
 The sidebar (left) can be dragged to resize, collapsed/expanded with the grip
 toggle, and toggles on/off via the menu button on mobile.
@@ -193,8 +185,7 @@ toggle, and toggles on/off via the menu button on mobile.
 
 ## Deploy to GitHub Pages
 
-This repo includes a GitHub Actions workflow that builds and deploys
-`dist/harkje/browser` to GitHub Pages:
+This repo includes a GitHub Actions workflow that builds and deploys `dist/harkje` to GitHub Pages:
 
 - `.github/workflows/deploy-pages.yml`
 
@@ -216,6 +207,6 @@ asset URLs resolve under the project subpath.
 Common extension points:
 
 - Node card UI: update the HTML template in `src/app/components/org-chart/org-chart.component.ts`.
-- Layout behavior: update `computeTidyLayout()` and the corresponding geometry tests in `src/app/core/org-layout.service.spec.ts`.
+- Layout behavior: update `computeBalancedLayout()` in `src/app/core/org-layout.service.ts`.
 - Input fields: extend `FlatNode`/`OrgNode` in `src/app/models/org.types.ts`, then update `flattenTree()` + `buildTree()` in `src/app/core/org-tree.service.ts`.
 - Icons: import the icon data from `lucide-angular`, add `readonly MyIcon = MyIcon;` to the component class, and use `<lucide-icon [img]="MyIcon" />` in the template. `LucideAngularModule` must be in the component's `imports`.
