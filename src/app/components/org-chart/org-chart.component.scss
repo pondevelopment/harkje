@@ -1,0 +1,93 @@
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.org-chart-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--chart-bg);
+}
+
+.org-chart-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  pointer-events: none;
+  background-image: radial-gradient(var(--chart-grid-dot) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.org-chart-svg {
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+.org-chart-svg:active {
+  cursor: grabbing;
+}
+
+/* Overlay pills (excluded from export). */
+.org-chart-pill {
+  position: absolute;
+  backdrop-filter: blur(4px);
+  padding: 6px 12px;
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  background-color: var(--overlay-bg);
+  border: 1px solid var(--overlay-border);
+  color: var(--overlay-text);
+
+  /* mark for export exclusion */
+  &[data-export-exclude='true'] {
+    /* set via attr below */
+  }
+}
+
+/* Apply data-export-exclude via ::ng-deep class since these are in template.
+   Actually simpler: set the attribute directly on the host elements. We
+   use ::ng-deep is not needed; set attribute via HostBinding instead. */
+
+.org-chart-pill--left {
+  bottom: 16px;
+  left: 16px;
+}
+
+.org-chart-pill--right {
+  bottom: 16px;
+  right: 16px;
+  pointer-events: none;
+}
+
+.org-chart-pill a {
+  color: var(--overlay-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.org-chart-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background-color: var(--accent);
+  animation: org-chart-pulse 2s infinite;
+}
+
+@keyframes org-chart-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}

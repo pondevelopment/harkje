@@ -1,0 +1,363 @@
+/*
+ * Harkje global styles.
+ *
+ * Theme tokens are defined as CSS variables per the original React app:
+ *   - UI (site) theme tokens in :root + html[data-site-theme="dark"]
+ *   - Chart theme tokens in [data-chart-theme="..."] blocks
+ *
+ * Tailwind is NOT used in the Angular port; component-specific styling lives in
+ * the per-component .scss files. These global variables drive both the app UI
+ * and the inline-styled org-chart cards (which read --card-* tokens directly).
+ */
+
+:root {
+  /* UI (site) theme tokens */
+  --ui-bg: #f3f4f6;
+  --ui-surface: #ffffff;
+  --ui-surface-2: #f8fafc;
+  --ui-border: #e5e7eb;
+  --ui-text: #0f172a;
+  --ui-muted: #64748b;
+  --ui-accent: #4f46e5;
+  --ui-accent-contrast: #ffffff;
+  --ui-overlay-bg: rgba(255, 255, 255, 0.8);
+  --ui-overlay-border: rgba(226, 232, 240, 1);
+  --ui-overlay-text: #64748b;
+  --ui-scrollbar-thumb: rgba(148, 163, 184, 0.9);
+  --ui-scrollbar-thumb-hover: rgba(100, 116, 139, 1);
+
+  /* Accent (chart) */
+  --accent: #4f46e5;
+  --accent-2: #7c3aed;
+  --accent-contrast: #ffffff;
+
+  /* Chart */
+  --chart-bg: rgba(248, 250, 252, 0.5);
+  --chart-grid-dot: rgba(79, 70, 229, 1);
+  --chart-link: #cbd5e1;
+
+  /* Typography (chart) */
+  --chart-font-family: 'Inter', sans-serif;
+  --card-name-size: 12px;
+  --card-name-weight: 700;
+  --card-title-size: 10px;
+  --card-title-weight: 600;
+  --card-dept-size: 9px;
+  --card-dept-weight: 500;
+  --badge-count-size: 9px;
+
+  /* Node card */
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --card-border-manager: #c7d2fe;
+  --card-name: #0f172a;
+  --card-title: #4f46e5;
+  --card-dept: #64748b;
+  --card-icon: #cbd5e1;
+  --badge-bg: #eef2ff;
+  --badge-fg: #4f46e5;
+  --badge-border: #c7d2fe;
+  --badge-bg-collapsed: #4f46e5;
+  --badge-fg-collapsed: #ffffff;
+  --badge-border-collapsed: #4f46e5;
+
+  /* Collapsed notch */
+  --card-notch-bg: var(--card-bg);
+  --card-notch-border: var(--card-border);
+
+  /* Overlay pills */
+  --overlay-bg: rgba(255, 255, 255, 0.8);
+  --overlay-text: #64748b;
+  --overlay-border: rgba(226, 232, 240, 1);
+}
+
+html[data-site-theme='dark'] {
+  --ui-bg: #0b1220;
+  --ui-surface: #0f172a;
+  --ui-surface-2: #111c33;
+  --ui-border: #233055;
+  --ui-text: #e5e7eb;
+  --ui-muted: #94a3b8;
+  --ui-accent: #818cf8;
+  --ui-accent-contrast: #0b1220;
+  --ui-overlay-bg: rgba(15, 23, 42, 0.8);
+  --ui-overlay-border: rgba(35, 48, 85, 1);
+  --ui-overlay-text: #94a3b8;
+  --ui-scrollbar-thumb: rgba(51, 65, 85, 1);
+  --ui-scrollbar-thumb-hover: rgba(148, 163, 184, 1);
+}
+
+[data-chart-theme='soft'] {
+  /* A gentle, low-contrast look for presentations */
+  --app-bg: #f7f7fb;
+  --surface: #ffffff;
+  --surface-2: #f6f7ff;
+  --border: #e6e7f2;
+  --text: #111827;
+  --muted: #6b7280;
+
+  --accent: #6366f1;
+  --accent-2: #a5b4fc;
+  --accent-contrast: #ffffff;
+
+  --chart-bg: rgba(248, 250, 252, 0.75);
+  --chart-grid-dot: rgba(99, 102, 241, 1);
+  --chart-link: #d7dbe7;
+
+  --card-bg: #ffffff;
+  --card-border: #e6e7f2;
+  --card-border-manager: #c7d2fe;
+  --card-name: #111827;
+  --card-title: #4f46e5;
+  --card-dept: #6b7280;
+  --card-icon: #d1d5db;
+
+  --badge-bg: rgba(99, 102, 241, 0.1);
+  --badge-fg: #4f46e5;
+  --badge-border: rgba(99, 102, 241, 0.28);
+  --badge-bg-collapsed: #6366f1;
+  --badge-fg-collapsed: #ffffff;
+  --badge-border-collapsed: #6366f1;
+
+  --overlay-bg: rgba(255, 255, 255, 0.82);
+  --overlay-text: #6b7280;
+  --overlay-border: rgba(230, 231, 242, 1);
+}
+
+[data-chart-theme='warm'] {
+  /* Warm neutrals + amber accent */
+  --app-bg: #faf7f2;
+  --surface: #fffaf5;
+  --surface-2: #fff4e6;
+  --border: #eadfce;
+  --text: #1f2937;
+  --muted: #6b7280;
+
+  --accent: #b45309;
+  --accent-2: #f59e0b;
+  --accent-contrast: #ffffff;
+
+  --chart-bg: rgba(255, 247, 237, 0.65);
+  --chart-grid-dot: rgba(180, 83, 9, 1);
+  --chart-link: #e4d3bf;
+
+  --card-bg: #fffaf5;
+  --card-border: #eadfce;
+  --card-border-manager: rgba(180, 83, 9, 0.55);
+  --card-name: #1f2937;
+  --card-title: #b45309;
+  --card-dept: #6b7280;
+  --card-icon: rgba(180, 83, 9, 0.25);
+
+  --badge-bg: rgba(245, 158, 11, 0.16);
+  --badge-fg: #92400e;
+  --badge-border: rgba(180, 83, 9, 0.35);
+  --badge-bg-collapsed: #b45309;
+  --badge-fg-collapsed: #ffffff;
+  --badge-border-collapsed: #b45309;
+
+  --overlay-bg: rgba(255, 250, 245, 0.85);
+  --overlay-text: #6b7280;
+  --overlay-border: rgba(234, 223, 206, 1);
+}
+
+[data-chart-theme='pencil'] {
+  /* Pencil + pastel: sketchy, playful, paper-like */
+  --chart-font-family: 'Segoe Print', 'Segoe Script', 'Bradley Hand', 'Comic Sans MS', system-ui,
+    sans-serif;
+  --card-name-size: 13px;
+  --card-name-weight: 700;
+  --card-title-size: 11px;
+  --card-title-weight: 600;
+  --card-dept-size: 10px;
+  --card-dept-weight: 500;
+  --badge-count-size: 10px;
+
+  --app-bg: #fbf7ef;
+  --surface: #fffaf0;
+  --surface-2: #fff4de;
+  --border: #e5dfd3;
+  --text: #1f2937;
+  --muted: #6b7280;
+
+  /* Pastel accent */
+  --accent: #60a5fa;
+  --accent-2: #93c5fd;
+  --accent-contrast: #0b1220;
+
+  --chart-bg: rgba(255, 250, 240, 0.7);
+  --chart-grid-dot: rgba(148, 163, 184, 1);
+  --chart-link: #9ca3af;
+
+  --card-bg: #fffaf0;
+  --card-border: #d1d5db;
+  --card-border-manager: rgba(96, 165, 250, 0.55);
+  --card-name: #111827;
+  --card-title: #3b82f6;
+  --card-dept: #6b7280;
+  --card-icon: rgba(148, 163, 184, 0.75);
+
+  --badge-bg: rgba(96, 165, 250, 0.16);
+  --badge-fg: #1d4ed8;
+  --badge-border: rgba(96, 165, 250, 0.35);
+  --badge-bg-collapsed: #60a5fa;
+  --badge-fg-collapsed: #0b1220;
+  --badge-border-collapsed: #60a5fa;
+
+  --overlay-bg: rgba(255, 250, 240, 0.86);
+  --overlay-text: #6b7280;
+  --overlay-border: rgba(229, 223, 211, 1);
+}
+
+[data-chart-theme='classic'] {
+  /* Classic serif typography (Times New Roman) */
+  --chart-font-family: 'Times New Roman', Times, serif;
+  --card-name-size: 13px;
+  --card-name-weight: 700;
+  --card-title-size: 11px;
+  --card-title-weight: 600;
+  --card-dept-size: 10px;
+  --card-dept-weight: 500;
+  --badge-count-size: 10px;
+
+  --app-bg: #f6f2ea;
+  --surface: #fffdf8;
+  --surface-2: #fbf4e8;
+  --border: #d8cdbb;
+  --text: #1f2937;
+  --muted: #6b7280;
+
+  --accent: #7c2d12;
+  --accent-2: #c2410c;
+  --accent-contrast: #ffffff;
+
+  --chart-bg: rgba(255, 253, 248, 0.65);
+  --chart-grid-dot: rgba(124, 45, 18, 1);
+  --chart-link: #cbbfae;
+
+  --card-bg: #fffdf8;
+  --card-border: #d8cdbb;
+  --card-border-manager: rgba(124, 45, 18, 0.45);
+  --card-name: #111827;
+  --card-title: #7c2d12;
+  --card-dept: #6b7280;
+  --card-icon: rgba(124, 45, 18, 0.22);
+
+  --badge-bg: rgba(194, 65, 12, 0.14);
+  --badge-fg: #7c2d12;
+  --badge-border: rgba(124, 45, 18, 0.3);
+  --badge-bg-collapsed: #7c2d12;
+  --badge-fg-collapsed: #ffffff;
+  --badge-border-collapsed: #7c2d12;
+
+  --overlay-bg: rgba(255, 253, 248, 0.86);
+  --overlay-text: #6b7280;
+  --overlay-border: rgba(216, 205, 187, 1);
+}
+
+[data-chart-theme='dark'] {
+  --app-bg: #0b1220;
+  --surface: #0f172a;
+  --surface-2: #111c33;
+  --border: #233055;
+  --text: #e5e7eb;
+  --muted: #94a3b8;
+
+  --accent: #818cf8;
+  --accent-2: #c4b5fd;
+  --accent-contrast: #0b1220;
+
+  --chart-bg: rgba(2, 6, 23, 0.35);
+  --chart-grid-dot: rgba(129, 140, 248, 1);
+  --chart-link: #334155;
+
+  --card-bg: #0b1220;
+  --card-border: #233055;
+  --card-border-manager: #6366f1;
+  --card-name: #e5e7eb;
+  --card-title: #a5b4fc;
+  --card-dept: #94a3b8;
+  --card-icon: #334155;
+  --badge-bg: rgba(99, 102, 241, 0.18);
+  --badge-fg: #c7d2fe;
+  --badge-border: rgba(99, 102, 241, 0.45);
+  --badge-bg-collapsed: #818cf8;
+  --badge-fg-collapsed: #0b1220;
+  --badge-border-collapsed: #818cf8;
+
+  --overlay-bg: rgba(15, 23, 42, 0.8);
+  --overlay-text: #94a3b8;
+  --overlay-border: rgba(35, 48, 85, 1);
+}
+
+[data-chart-theme='highContrast'] {
+  --app-bg: #000000;
+  --surface: #000000;
+  --surface-2: #0a0a0a;
+  --border: #ffffff;
+  --text: #ffffff;
+  --muted: #e5e7eb;
+
+  --accent: #ffffff;
+  --accent-2: #ffffff;
+  --accent-contrast: #000000;
+
+  --chart-bg: rgba(0, 0, 0, 0);
+  --chart-grid-dot: rgba(255, 255, 255, 1);
+  --chart-link: #ffffff;
+
+  --card-bg: #000000;
+  --card-border: #ffffff;
+  --card-border-manager: #ffffff;
+  --card-name: #ffffff;
+  --card-title: #ffffff;
+  --card-dept: #ffffff;
+  --card-icon: #ffffff;
+  --badge-bg: #ffffff;
+  --badge-fg: #000000;
+  --badge-border: #ffffff;
+  --badge-bg-collapsed: #ffffff;
+  --badge-fg-collapsed: #000000;
+  --badge-border-collapsed: #ffffff;
+
+  --overlay-bg: rgba(0, 0, 0, 0.9);
+  --overlay-text: #ffffff;
+  --overlay-border: rgba(255, 255, 255, 1);
+}
+
+/* Minimal global resets */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--ui-bg);
+  color: var(--ui-text);
+  overflow: hidden; /* App handles scrolling */
+}
+
+/* Custom scrollbar for sidebar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ui-scrollbar-thumb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ui-scrollbar-thumb-hover);
+}

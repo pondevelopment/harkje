@@ -31,17 +31,16 @@ jobs:
         run: npm ci
 
       # GitHub Pages for a project site is served from https://<user>.github.io/<repo>/
-      # Vite needs the correct base path so built asset URLs resolve.
+      # Angular needs the correct base href so built asset URLs resolve.
+      # `prebuild` (scripts/generate-build-info.mjs) writes src/environments/build-info.ts
+      # from git sha + time, so we don't need VITE_BUILD_* env vars anymore.
       - name: Build
-        run: |
-          VITE_BUILD_SHA='${{ github.sha }}' \
-          VITE_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-          npm run build -- --base=/${{ github.event.repository.name }}/
+        run: npm run build -- --base-href=/${{ github.event.repository.name }}/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: dist/harkje
 
   deploy:
     needs: build
