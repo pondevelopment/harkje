@@ -18,7 +18,7 @@ import { OrgChartComponent } from './components/org-chart/org-chart.component';
 
 /**
  * App shell: sidebar (InputPanel) + main chart area (OrgChart), with toolbar
- * (theme selects, aspect ratio slider, download, compact) and a draggable
+ * (theme selectors, aspect ratio, download) and a draggable
  * sidebar resize handle. State is held in signals; zoneless change detection.
  */
 @Component({
@@ -135,14 +135,6 @@ import { OrgChartComponent } from './components/org-chart/org-chart.component';
             <span>Download image</span>
           </button>
 
-          <button
-            type="button"
-            class="tool tool--btn"
-            (click)="handleCompact()"
-            title="Run an optional compaction pass to reduce whitespace"
-          >
-            <span>Compact layout</span>
-          </button>
         </div>
 
         <div
@@ -317,9 +309,5 @@ export class AppComponent implements OnInit, OnDestroy {
 
   handleDownload(): void {
     this.chartRef?.exportImage();
-  }
-
-  handleCompact(): void {
-    this.chartRef?.runCompaction();
   }
 }

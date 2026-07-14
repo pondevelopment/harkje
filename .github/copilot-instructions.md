@@ -26,7 +26,7 @@ from git sha + time before every build; in dev `fileReplacements` swaps in a pla
   `provideExperimentalZonelessChangeDetection`, `OnPush`)
 - TypeScript (strict, `noPropertyAccessFromIndexSignature`)
 - D3 (`d3`) for layout + zoom/pan
-- `html-to-image` for PNG export
+- Native SVG serialization + canvas rasterization for PNG export
 - `lucide-angular` for icons (see "Icons" section — icons are data, not components)
 - Styling: component-scoped SCSS + global CSS variables in `src/styles.scss`.
   Do **not** add Tailwind (the old React app used Tailwind via CDN; that has been removed).
@@ -57,9 +57,9 @@ Icon-name differences vs. lucide-react: `Loader` (no `Loader2`), `Wand` (no `Wan
   - `json-editor-tab.component.ts` — flat JSON list editor
   - `csv-editor-tab.component.ts` — CSV editor
 - Renderer + export: `src/app/components/org-chart/org-chart.component.ts`
-  - D3 SVG render, zoom/pan, click-to-collapse, PNG export, compaction animation
-- Layout engine (pure logic, no Angular): `src/app/core/org-layout.service.ts`
-  - `computeBalancedLayout()`, `compactLayoutOneShot()`, `buildLinkPath()`, ...
+  - D3 SVG render, zoom/pan, click-to-collapse, PNG export
+- Layout engine (pure logic, no Angular): `src/app/core/adaptive-org-layout.service.ts`
+  - `computeAdaptiveLayout()`, `buildLinkRoute()`, `buildLinkPath()`, ...
 - Tree <-> flat conversion: `src/app/core/org-tree.service.ts`
   - `flattenTree()` converts `OrgNode` -> `FlatNode[]`
   - `buildTree()` converts `FlatNode[]` -> `OrgNode`
@@ -118,17 +118,22 @@ When adding fields to nodes:
 - Component styles are scoped (Angular view encapsulation) — don't reach into another
   component's DOM.
 
-## OrgChart renderer conventions (D3 + html-to-image)
+## OrgChart renderer conventions (D3 + native PNG export)
 
 - The chart uses an SVG `<foreignObject>` with an HTML card template.
-- Export is sensitive to browser rendering; keep export options conservative
-  (pixelRatio, skipFonts, warmup run).
+- Export serializes a detached SVG clone, copies chart CSS variables to its root,
+  rasterizes it through a browser canvas, and must keep the exact target-ratio frame.
 - Collapse behavior is tracked by `collapsedKeys: OrgChartNodeKeys` (PrimeNG-style:
   key present + truthy = collapsed); clicking a node toggles collapse only if it had
   children in the original data.
-- Zoom transform is preserved across re-renders unless the `value` input identity changes.
-- `OrgChartComponent` exposes imperative `exportImage()` and `runCompaction()` methods
-  callable via `@ViewChild` (the app shell wires these to toolbar buttons).
+- Zoom transform is preserved across collapse/theme re-renders. Data identity,
+  direction, or target-aspect-ratio changes trigger auto-fit.
+- Preserve source child order row-major. Compact by translating complete subtrees
+  against their real contours; never add person-specific offsets.
+- Target aspect ratio selects a fixed-gap layout topology. Never scale coordinates,
+  card dimensions, or layout gaps to meet a ratio.
+- Wrapped rows reserve connector channels; every route must clear unrelated cards.
+- `OrgChartComponent` exposes imperative `exportImage()` via `@ViewChild`.
 
 ## Dependency guidance
 

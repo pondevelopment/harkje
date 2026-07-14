@@ -12,8 +12,8 @@ and adheres to [Semantic Versioning](https://semver.org/) once it starts tagging
 - **Rewritten from Vite + React to Angular 19.2.** The entire application was
   ported to Angular using standalone components, signals, and **zoneless**
   change detection (`provideExperimentalZonelessChangeDetection`, `OnPush`
-  everywhere). D3, `html-to-image`, and the local deterministic generator
-  behaviour are preserved; no AI / API keys are used.
+  everywhere). D3 and the local deterministic generator behaviour are
+  preserved; no AI / API keys are used.
 - **Tech stack updated**: TypeScript (strict) replaces the React/Vite toolchain;
   `lucide-react` → `lucide-angular` (icons are now data objects bound via
   `<lucide-icon [img]="…">`, see README "Extending the app"); Tailwind-via-CDN
@@ -39,14 +39,14 @@ and adheres to [Semantic Versioning](https://semver.org/) once it starts tagging
 - **Adaptive contour layout**: the engine generates fixed-gap ordered row
   variants and selects the topology closest to the requested aspect ratio.
   Aspect ratio now recomputes the arrangement instead of stretching distances;
-  branch spacing independently controls minimum contour clearance. Complete
-  subtrees move rigidly and connectors use reserved channels. The former
+  card and layout gaps stay fixed. Complete subtrees move rigidly, connectors
+  use reserved channels, and export adds an exact-ratio outer frame. The former
   one-shot compaction control is no longer needed.
 - **Sidebar resize / collapse**: the sidebar can be dragged to resize,
   collapsed/expanded via a grip toggle, and toggled on/off with the menu button
   on mobile.
 - **Unit tests**: Vitest specs for the pure services — `org-tree.service`,
-  `org-layout.service`, `org-generator.service`, and `csv-parser.service`
+  `adaptive-org-layout.service`, `org-generator.service`, and `csv-parser.service`
   (under `src/app/core/*.spec.ts`).
 - **Copilot instructions** for the Angular codebase, including the
   `lucide-angular@0.475` icon-usage pattern and data-model invariants.

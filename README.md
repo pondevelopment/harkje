@@ -24,7 +24,7 @@ Public repository (PRs welcome):
 - Angular 19.2 (standalone components, signals, **zoneless** change detection)
 - TypeScript (strict)
 - D3 (`d3`) for layout rendering and zoom/pan
-- `html-to-image` for exporting the chart as PNG
+- Native SVG serialization + canvas rasterization for PNG export
 - `lucide-angular` for icons
 - Component-scoped SCSS + global CSS variables (no Tailwind)
 
@@ -67,9 +67,11 @@ Key files:
   - `generator-tab.component.ts` — one-click random org by size
   - `json-editor-tab.component.ts` — flat JSON list editor
   - `csv-editor-tab.component.ts` — CSV editor
-- `src/app/components/org-chart/org-chart.component.ts`: D3 renderer + SVG rendering + export + compaction
-- `src/app/core/org-layout.service.ts`: pure layout engine
-  - `computeBalancedLayout()`, `compactLayoutOneShot()`, `buildLinkPath()`, ...
+- `src/app/components/org-chart/org-chart.component.ts`: D3 renderer + SVG rendering + export
+- `src/app/core/adaptive-org-layout.service.ts`: pure layout engine
+  - `computeAdaptiveLayout()` generates fixed-gap ordered row variants and
+    selects the topology closest to the requested aspect ratio.
+  - `buildLinkRoute()` / `buildLinkPath()` use reserved connector channels.
 - `src/app/core/org-tree.service.ts`: tree <-> flat conversion
   - `flattenTree()` converts `OrgNode` → `FlatNode[]` for the editor.
   - `buildTree()` converts `FlatNode[]` → `OrgNode` for rendering.
@@ -156,10 +158,9 @@ Both return a `FlatNode[]` that forms a valid tree with exactly one root.
 
 ## Exporting the chart
 
-The chart component exposes imperative methods (called via `@ViewChild`):
+The chart component exposes an imperative export method (called via `@ViewChild`):
 
-- `exportImage()`: exports the current chart viewport to a PNG using `html-to-image`.
-- `runCompaction()`: runs an optional compaction pass to reduce whitespace.
+- `exportImage()`: exports the exact target-ratio communication frame to PNG.
 
 Export details:
 
@@ -175,9 +176,14 @@ The toolbar (top of the main area) provides:
 
 - Site theme selector (Light / Dark)
 - Chart theme selector (Light / Soft / Warm / Pencil / Classic / Dark / High Contrast)
-- Target aspect ratio slider: influences how the layout engine wraps/grids large child groups
+- Target aspect ratio slider: recomputes and selects the closest fixed-gap row topology
 - Download image: exports a PNG
-- Compact layout: runs an optional compaction pass to reduce whitespace
+
+The layout is automatically contour-packed; no manual compaction pass is
+required. Changing aspect ratio changes row partitions and subtree arrangements,
+not card sizes or gaps. Source child order remains row-major, complete subtrees
+move as rigid blocks, and connectors use reserved channels. PNG export adds a
+symmetric outer frame so the image matches the requested ratio exactly.
 
 The sidebar (left) can be dragged to resize, collapsed/expanded with the grip
 toggle, and toggles on/off via the menu button on mobile.
@@ -207,6 +213,6 @@ asset URLs resolve under the project subpath.
 Common extension points:
 
 - Node card UI: update the HTML template in `src/app/components/org-chart/org-chart.component.ts`.
-- Layout behavior: update `computeBalancedLayout()` in `src/app/core/org-layout.service.ts`.
+- Layout behavior: update `computeAdaptiveLayout()` and its geometry tests in `src/app/core/adaptive-org-layout.service.spec.ts`.
 - Input fields: extend `FlatNode`/`OrgNode` in `src/app/models/org.types.ts`, then update `flattenTree()` + `buildTree()` in `src/app/core/org-tree.service.ts`.
 - Icons: import the icon data from `lucide-angular`, add `readonly MyIcon = MyIcon;` to the component class, and use `<lucide-icon [img]="MyIcon" />` in the template. `LucideAngularModule` must be in the component's `imports`.
