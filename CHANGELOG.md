@@ -7,6 +7,13 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## 2.0.1 — 2026-07-14
+
+### Fixed
+
+- **GitHub Pages deployment** now uploads the Angular browser output from
+  `dist/harkje/browser`, placing `index.html` at the artifact root.
+
 ## 2.0.0 — 2026-07-14
 
 ### Changed

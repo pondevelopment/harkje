@@ -194,7 +194,8 @@ toggle, and toggles on/off via the menu button on mobile.
 
 ## Deploy to GitHub Pages
 
-This repo includes a GitHub Actions workflow that builds and deploys `dist/harkje` to GitHub Pages:
+This repo includes a GitHub Actions workflow that builds and deploys the static
+browser output from `dist/harkje/browser` to GitHub Pages:
 
 - `.github/workflows/deploy-pages.yml`
 
