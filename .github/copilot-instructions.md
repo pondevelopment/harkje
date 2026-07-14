@@ -121,8 +121,8 @@ When adding fields to nodes:
 ## OrgChart renderer conventions (D3 + native PNG export)
 
 - The chart uses an SVG `<foreignObject>` with an HTML card template.
-- Export serializes a detached SVG clone, copies chart CSS variables to its root,
-  rasterizes it through a browser canvas, and must keep the exact target-ratio frame.
+- Export serializes a detached SVG clone, replaces HTML cards with native themed
+  SVG primitives, rasterizes through a browser canvas, and keeps the exact frame.
 - Collapse behavior is tracked by `collapsedKeys: OrgChartNodeKeys` (PrimeNG-style:
   key present + truthy = collapsed); clicking a node toggles collapse only if it had
   children in the original data.
@@ -132,7 +132,12 @@ When adding fields to nodes:
   against their real contours; never add person-specific offsets.
 - Target aspect ratio selects a fixed-gap layout topology. Never scale coordinates,
   card dimensions, or layout gaps to meet a ratio.
-- Wrapped rows reserve connector channels; every route must clear unrelated cards.
+- Wrapped peer rows advance exactly one card-height + gap step. Never let one
+  child's subtree height push later direct reports down by extra levels.
+- Pack later rows horizontally against existing contours, reserve connector
+  channels, and require every route to clear unrelated cards.
+- Cache target-independent candidate frontiers per visible hierarchy/direction;
+  rebuild only when data, collapse state, or direction changes.
 - `OrgChartComponent` exposes imperative `exportImage()` via `@ViewChild`.
 
 ## Dependency guidance

@@ -110,6 +110,8 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   private transform = d3.zoomIdentity;
   private prevData?: OrgNode;
   private prevLayoutKey?: string;
+  private hierarchyData?: OrgNode;
+  private hierarchyCollapsedKey?: string;
 
   constructor(private readonly layout: AdaptiveOrgLayoutService) {
     // Re-render whenever any layout-affecting input changes.
@@ -403,16 +405,23 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
     svg.selectAll('*').remove();
 
     const { width, height } = this.dimensions();
-    const root = d3.hierarchy<OrgNode>(data);
     const layoutKey = `${this.direction()}|${this.targetAspectRatio()}`;
 
-    // Apply collapse state
     const collapsed = this.collapsedSet();
-    root.descendants().forEach((d) => {
-      if (collapsed.has(d.data.id)) {
-        d.children = undefined;
-      }
-    });
+    const collapsedKey = Array.from(collapsed).sort().join('\u0000');
+    let root = this.root;
+    if (
+      !root ||
+      this.hierarchyData !== data ||
+      this.hierarchyCollapsedKey !== collapsedKey
+    ) {
+      root = d3.hierarchy<OrgNode>(data);
+      root.descendants().forEach((d) => {
+        if (collapsed.has(d.data.id)) d.children = undefined;
+      });
+      this.hierarchyData = data;
+      this.hierarchyCollapsedKey = collapsedKey;
+    }
 
     const result = this.layout.computeAdaptiveLayout(
       root,

@@ -6,6 +6,7 @@ import {
   CARD_WIDTH,
   EXPORT_PADDING,
   GAP_H,
+  GAP_V,
   LayoutPoint,
   LayoutRect,
   LayoutResult,
@@ -51,6 +52,33 @@ describe('AdaptiveOrgLayoutService', () => {
         ],
       },
       { ...leaf('operations'), children: [{ ...leaf('ops-manager'), children: [leaf('ops-1')] }] },
+    ],
+  });
+  const makePeerBandRegressionTree = (): OrgNode => ({
+    ...leaf('cameron'),
+    title: 'CEO',
+    children: [
+      { ...leaf('rowan'), children: [leaf('rowan-a'), leaf('rowan-b'), leaf('rowan-c')] },
+      { ...leaf('kai-product'), children: [leaf('product-a'), leaf('product-b'), leaf('product-c')] },
+      { ...leaf('kai-sales'), children: [leaf('sales-a')] },
+      {
+        ...leaf('jamie'),
+        children: [
+          {
+            ...leaf('alex'),
+            children: [
+              leaf('jamie-marketing'),
+              {
+                ...leaf('jordan'),
+                children: [leaf('morgan-grandchild')],
+              },
+            ],
+          },
+          leaf('casey'),
+          leaf('morgan'),
+          leaf('reese'),
+        ],
+      },
     ],
   });
   const positioned = (node: d3.HierarchyNode<OrgNode>): PositionedNode => node as PositionedNode;
@@ -124,6 +152,25 @@ describe('AdaptiveOrgLayoutService', () => {
     expect(rootRows(portrait.result).flat()).toEqual(rootRows(landscape.result).flat());
   });
 
+  it('reuses one hierarchy frontier across ratio changes without stale positions', () => {
+    const root = d3.hierarchy(makeStar());
+    const portrait = service.computeAdaptiveLayout(root, LayoutDirection.TopDown, 0.25);
+    const portraitPositions = root.descendants().map((node) => [
+      node.data.id,
+      positioned(node).x,
+      positioned(node).y,
+    ]);
+    const landscape = service.computeAdaptiveLayout(root, LayoutDirection.TopDown, 4);
+    expect(landscape.signature).not.toBe(portrait.signature);
+    const portraitAgain = service.computeAdaptiveLayout(root, LayoutDirection.TopDown, 0.25);
+    expect(portraitAgain.signature).toBe(portrait.signature);
+    expect(root.descendants().map((node) => [
+      node.data.id,
+      positioned(node).x,
+      positioned(node).y,
+    ])).toEqual(portraitPositions);
+  });
+
   it('keeps fixed card gaps in every selected row', () => {
     for (const target of [0.25, 0.5, 1, 2, 4]) {
       const { root, result } = layout(makeStar(), target);
@@ -166,6 +213,28 @@ describe('AdaptiveOrgLayoutService', () => {
       if (Math.abs(gap - GAP_H) < 0.001) contacts++;
     }
     expect(contacts).toBeGreaterThan(0);
+  });
+
+  it('does not push a shallow peer below an earlier sibling subtree', () => {
+    const { root, result } = layout(makePeerBandRegressionTree(), 2.45);
+    const byId = new Map(root.descendants().map((node) => [node.data.id, node]));
+    const jamie = positioned(byId.get('jamie')!);
+    const alex = byId.get('alex')!;
+    const reese = positioned(byId.get('reese')!);
+    const deepestAlexDescendant = Math.max(
+      ...alex.descendants().slice(1).map((node) => positioned(node).y),
+    );
+    const rows = result.rowsByParent.get('jamie')!;
+
+    expect(rows.flat()).toEqual(['alex', 'casey', 'morgan', 'reese']);
+    expect(reese.y).toBeLessThanOrEqual(deepestAlexDescendant);
+    expect(reese.y - jamie.y).toBeLessThanOrEqual(2 * (CARD_HEIGHT + GAP_V));
+
+    const rowBaselines = rows.map((row) => positioned(byId.get(row[0]!)!).y);
+    for (let index = 1; index < rowBaselines.length; index++) {
+      expect(rowBaselines[index]! - rowBaselines[index - 1]!)
+        .toBeCloseTo(CARD_HEIGHT + GAP_V, 8);
+    }
   });
 
   it('is deterministic and recomputes collapsed hierarchies', () => {

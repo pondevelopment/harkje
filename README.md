@@ -182,8 +182,11 @@ The toolbar (top of the main area) provides:
 The layout is automatically contour-packed; no manual compaction pass is
 required. Changing aspect ratio changes row partitions and subtree arrangements,
 not card sizes or gaps. Source child order remains row-major, complete subtrees
-move as rigid blocks, and connectors use reserved channels. PNG export adds a
-symmetric outer frame so the image matches the requested ratio exactly.
+move as rigid blocks, and connectors use reserved channels. Wrapped peer rows
+advance by one fixed card/gap step; a deep subtree never pushes later peers below
+its descendants. Candidate frontiers are cached so ratio changes remain fast.
+PNG export adds a symmetric outer frame so the image matches the requested ratio
+exactly.
 
 The sidebar (left) can be dragged to resize, collapsed/expanded with the grip
 toggle, and toggles on/off via the menu button on mobile.

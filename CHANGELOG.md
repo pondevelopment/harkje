@@ -3,9 +3,11 @@
 All notable changes to Harkje are documented here.
 
 This project tries to follow the principles of [Keep a Changelog](https://keepachangelog.com/),
-and adheres to [Semantic Versioning](https://semver.org/) once it starts tagging releases.
+and adheres to [Semantic Versioning](https://semver.org/).
 
-## Unreleased — 2026-07-13
+## Unreleased
+
+## 2.0.0 — 2026-07-14
 
 ### Changed
 
@@ -40,7 +42,9 @@ and adheres to [Semantic Versioning](https://semver.org/) once it starts tagging
   variants and selects the topology closest to the requested aspect ratio.
   Aspect ratio now recomputes the arrangement instead of stretching distances;
   card and layout gaps stay fixed. Complete subtrees move rigidly, connectors
-  use reserved channels, and export adds an exact-ratio outer frame. The former
+  use reserved channels, and wrapped peer bands advance by a fixed step instead
+  of inheriting the deepest subtree height. Candidate frontiers are cached for
+  fast ratio changes, and export adds an exact-ratio outer frame. The former
   one-shot compaction control is no longer needed.
 - **Sidebar resize / collapse**: the sidebar can be dragged to resize,
   collapsed/expanded via a grip toggle, and toggled on/off with the menu button
