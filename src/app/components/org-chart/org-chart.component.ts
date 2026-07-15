@@ -62,7 +62,7 @@ import {
       </div>
       <div data-export-exclude="true" class="org-chart-pill org-chart-pill--right">
         <span class="org-chart-dot"></span>
-        Adaptive Layout Engine v4
+        Recursive Layout Engine v5
       </div>
     </div>
   `,
@@ -476,6 +476,8 @@ export class OrgChartComponent implements AfterViewInit, OnDestroy {
       .enter()
       .append('path')
       .attr('class', 'link')
+      .attr('data-source-id', (d: any) => String(d.source.data.id))
+      .attr('data-target-id', (d: any) => String(d.target.data.id))
       .attr('fill', 'none')
       .attr('stroke', chartLinkStroke)
       .attr('stroke-width', 1.5)

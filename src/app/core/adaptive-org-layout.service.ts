@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import * as d3 from 'd3';
 import { LayoutDirection, OrgNode } from '../models/org.types';
+import { classifyOrthogonalSegments } from './org-layout-geometry';
 
 export interface LayoutRect {
   id: string;
@@ -47,13 +48,22 @@ export const EXPORT_PADDING = 40;
 
 const LINK_CHANNEL_WIDTH = GAP_H;
 const MAX_VARIANTS_PER_NODE = 32;
+const MAX_CHILD_BLOCK_COMBINATIONS = 16;
+const MAX_PARTITION_STATES = 32;
 const EXHAUSTIVE_PARTITION_CHILD_LIMIT = 8;
 const RATIO_TOLERANCE = 0.08;
+const FINAL_RATIO_TOLERANCE = 0.08;
+// A better parent hierarchy may trade at most ~22% sibling breadth; beyond
+// that point both candidates remain on the Pareto frontier for ratio selection.
+const HIERARCHY_BREADTH_TOLERANCE = 0.20;
 const MAX_RATIO_TIER_WIDTH = Math.log(5 / 3);
 const RATIO_EXTREMENESS_WEIGHT = 2;
 const ASPECT_PROFILES = [
   0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 4 / 3,
   1.5, 16 / 9, 2, 2.5, 3, 4,
+] as const;
+const CHILD_BLOCK_ASPECT_PROFILES = [
+  0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4,
 ] as const;
 
 type HierarchyNode = d3.HierarchyNode<OrgNode>;
@@ -72,10 +82,21 @@ interface LogicalRect {
   maxDepth: number;
 }
 
-interface LayoutVariant {
+interface OwnedRouteSegment {
+  ownerId: string;
+  sourceId: string;
+  targetId: string;
+  start: LogicalPoint;
+  end: LogicalPoint;
+}
+
+/** Complete recursive block: cards, internal routes, topology, and metrics. */
+interface SubtreeBlock {
   placements: Map<HierarchyNode, LogicalPoint>;
   rects: LogicalRect[];
   routes: Map<string, LogicalPoint[]>;
+  routeSegments: OwnedRouteSegment[];
+  entryPort: LogicalPoint;
   rowsByParent: Map<string, string[][]>;
   minBreadth: number;
   maxBreadth: number;
@@ -86,6 +107,9 @@ interface LayoutVariant {
   physicalWidth: number;
   physicalHeight: number;
   connectorLength: number;
+  peerBandCount: number;
+  peerBandImbalance: number;
+  peerItemCount: number;
   rowCount: number;
   maxPeerBandOffset: number;
   peerBandDelay: number;
@@ -97,14 +121,14 @@ interface LayoutVariant {
 }
 
 /**
- * Bounded aspect-ratio-aware layout solver. It selects fixed-gap ordered row
- * variants; target ratio never scales cards, coordinates, or gaps.
+ * Bottom-up aspect-ratio-aware solver. Each node returns a bounded frontier of
+ * routed subtree blocks; target ratio never scales cards, coordinates, or gaps.
  */
 @Injectable({ providedIn: 'root' })
 export class AdaptiveOrgLayoutService {
   private readonly frontierCache = new WeakMap<
     HierarchyNode,
-    Map<LayoutDirection, LayoutVariant[]>
+    Map<LayoutDirection, SubtreeBlock[]>
   >();
 
   computeAdaptiveLayout(
@@ -123,7 +147,7 @@ export class AdaptiveOrgLayoutService {
       variants = this.buildVariants(root, direction, new Map());
       byDirection.set(direction, variants);
     }
-    const selected = this.selectValidVariant(variants, target);
+    const selected = this.selectValidBlock(variants, target);
 
     for (const [node, point] of selected.placements) {
       const positioned = node as PositionedNode;
@@ -141,7 +165,8 @@ export class AdaptiveOrgLayoutService {
       routes.set(key, route.map((point) => this.toPhysicalPoint(point, direction)));
     }
 
-    const { bounds } = this.computeRectsAndBounds(root);
+    const { bounds: cardBounds } = this.computeRectsAndBounds(root);
+    const bounds = this.extendBoundsWithRoutes(cardBounds, routes);
     return {
       bounds,
       frameBounds: this.computeFrameBounds(bounds, target),
@@ -210,8 +235,8 @@ export class AdaptiveOrgLayoutService {
   private buildVariants(
     node: HierarchyNode,
     direction: LayoutDirection,
-    memo: Map<HierarchyNode, LayoutVariant[]>,
-  ): LayoutVariant[] {
+    memo: Map<HierarchyNode, SubtreeBlock[]>,
+  ): SubtreeBlock[] {
     const cached = memo.get(node);
     if (cached) return cached;
 
@@ -219,7 +244,7 @@ export class AdaptiveOrgLayoutService {
     const cardDepth = direction === LayoutDirection.LeftRight ? CARD_WIDTH : CARD_HEIGHT;
     const children = node.children ?? [];
     if (children.length === 0) {
-      const leaf = this.finalizeVariant({
+      const leaf = this.finalizeBlock({
         placements: new Map([[node, { breadth: 0, depth: 0 }]]),
         rects: [{
           id: String(node.data.id),
@@ -231,6 +256,9 @@ export class AdaptiveOrgLayoutService {
         routes: new Map(),
         rowsByParent: new Map(),
         connectorLength: 0,
+        peerBandCount: 0,
+        peerBandImbalance: 0,
+        peerItemCount: 0,
         rowCount: 0,
         maxPeerBandOffset: 0,
         peerBandDelay: 0,
@@ -245,10 +273,15 @@ export class AdaptiveOrgLayoutService {
     }
 
     const childFrontiers = children.map((child) => this.buildVariants(child, direction, memo));
-    const generated: LayoutVariant[] = [];
+    const generated: SubtreeBlock[] = [];
     for (const selectedChildren of this.buildChildSelections(childFrontiers)) {
       for (const partition of this.generatePartitions(selectedChildren, direction)) {
-        const variant = this.composeVariant(node, selectedChildren, partition, direction);
+        const variant = this.composeVariantRaw(
+          node,
+          selectedChildren,
+          partition,
+          direction,
+        );
         if (variant) generated.push(variant);
         const roster = this.composeRosterVariant(
           node,
@@ -264,31 +297,165 @@ export class AdaptiveOrgLayoutService {
       throw new Error(`No valid layout candidates for node ${String(node.data.id)}.`);
     }
 
-    const variants = this.pruneVariants(generated);
+    const variants = this.pruneBlocks(generated);
     memo.set(node, variants);
     return variants;
   }
 
-  private buildChildSelections(frontiers: LayoutVariant[][]): LayoutVariant[][] {
-    const selections = new Map<string, LayoutVariant[]>();
-    const add = (variants: LayoutVariant[]) => {
-      const key = variants.map((variant) => variant.signature).join('\u0001');
-      if (!selections.has(key)) selections.set(key, variants);
-    };
-    for (const profile of ASPECT_PROFILES) {
-      add(frontiers.map((frontier) => this.selectVariant(frontier, profile)));
+  private buildChildSelections(frontiers: SubtreeBlock[][]): SubtreeBlock[][] {
+    let combinations: SubtreeBlock[][] = [[]];
+    for (const frontier of frontiers) {
+      const options = this.childBlockOptions(frontier);
+      const expanded = new Map<string, SubtreeBlock[]>();
+      for (const combination of combinations) {
+        for (const option of options) {
+          const next = [...combination, option];
+          expanded.set(next.map((block) => block.signature).join('\u0001'), next);
+        }
+      }
+      combinations = this.pruneChildBlockCombinations(
+        Array.from(expanded.values()),
+      );
     }
-    add(frontiers.map((frontier) => this.minVariant(
-      frontier,
-      (variant) => variant.physicalWidth * variant.physicalHeight,
+    return combinations;
+  }
+
+  private childBlockOptions(frontier: SubtreeBlock[]): SubtreeBlock[] {
+    const options = new Map<string, SubtreeBlock>();
+    const add = (block: SubtreeBlock) => options.set(block.signature, block);
+    for (const profile of CHILD_BLOCK_ASPECT_PROFILES) {
+      add(this.selectBlock(frontier, profile));
+    }
+    add(this.minVariant(frontier, (block) => block.physicalWidth * block.physicalHeight));
+    add(this.minVariant(frontier, (block) => block.physicalWidth));
+    add(this.minVariant(frontier, (block) => block.physicalHeight));
+    add(this.minVariant(frontier, (block) => block.connectorLength));
+    add(this.minVariant(frontier, (block) => block.physicalWidth / block.physicalHeight));
+    add(this.minVariant(frontier, (block) => -block.physicalWidth / block.physicalHeight));
+    add(this.minHierarchyVariant(frontier));
+    return Array.from(options.values()).sort((a, b) => a.signature.localeCompare(b.signature));
+  }
+
+  private pruneChildBlockCombinations(
+    combinations: SubtreeBlock[][],
+  ): SubtreeBlock[][] {
+    if (combinations.length <= MAX_CHILD_BLOCK_COMBINATIONS) {
+      return combinations.sort((a, b) => this.childCombinationKey(a)
+        .localeCompare(this.childCombinationKey(b)));
+    }
+
+    const kept = new Map<string, SubtreeBlock[]>();
+    const add = (combination: SubtreeBlock[]) =>
+      kept.set(this.childCombinationKey(combination), combination);
+    const minimumBy = (metric: (combination: SubtreeBlock[]) => number) =>
+      [...combinations].sort((a, b) =>
+        metric(a) - metric(b) ||
+        this.childCombinationKey(a).localeCompare(this.childCombinationKey(b)),
+      )[0]!;
+
+    add(minimumBy((blocks) => blocks.reduce(
+      (sum, block) => sum + block.physicalWidth * block.physicalHeight,
+      0,
     )));
-    add(frontiers.map((frontier) => this.minVariant(frontier, (variant) => variant.physicalWidth)));
-    add(frontiers.map((frontier) => this.minVariant(frontier, (variant) => variant.physicalHeight)));
-    return Array.from(selections.values());
+    add(minimumBy((blocks) => blocks.reduce((sum, block) => sum + block.physicalWidth, 0)));
+    add(minimumBy((blocks) => blocks.reduce((sum, block) => sum + block.physicalHeight, 0)));
+    add(minimumBy((blocks) => blocks.reduce((sum, block) => sum + block.connectorLength, 0)));
+    add(minimumBy((blocks) => this.estimatedChildCombinationRatioRange(blocks).min));
+    add(minimumBy((blocks) => -this.estimatedChildCombinationRatioRange(blocks).max));
+    let hierarchyMinimum = combinations[0]!;
+    for (const combination of combinations.slice(1)) {
+      const hierarchyOrder = this.compareChildCombinationHierarchy(
+        combination,
+        hierarchyMinimum,
+      );
+      if (
+        hierarchyOrder < 0 ||
+        (
+          hierarchyOrder === 0 &&
+          this.childCombinationKey(combination)
+            .localeCompare(this.childCombinationKey(hierarchyMinimum)) < 0
+        )
+      ) {
+        hierarchyMinimum = combination;
+      }
+    }
+    add(hierarchyMinimum);
+    for (const profile of CHILD_BLOCK_ASPECT_PROFILES) {
+      add(minimumBy((blocks) => this.estimatedChildCombinationRatioError(blocks, profile)));
+    }
+
+    if (kept.size < MAX_CHILD_BLOCK_COMBINATIONS) {
+      const remaining = [...combinations].sort((a, b) =>
+        this.estimatedChildCombinationRatioError(a, 1) -
+          this.estimatedChildCombinationRatioError(b, 1) ||
+        this.childCombinationKey(a).localeCompare(this.childCombinationKey(b)),
+      );
+      for (const combination of remaining) {
+        add(combination);
+        if (kept.size >= MAX_CHILD_BLOCK_COMBINATIONS) break;
+      }
+    }
+    return Array.from(kept.values()).sort((a, b) =>
+      this.childCombinationKey(a).localeCompare(this.childCombinationKey(b)),
+    );
+  }
+
+  private estimatedChildCombinationRatioError(
+    blocks: SubtreeBlock[],
+    target: number,
+  ): number {
+    const rowWidth = blocks.reduce((sum, block) => sum + block.physicalWidth, 0) +
+      Math.max(0, blocks.length - 1) * GAP_H;
+    const rowHeight = Math.max(...blocks.map((block) => block.physicalHeight));
+    const columnWidth = Math.max(...blocks.map((block) => block.physicalWidth));
+    const columnHeight = blocks.reduce((sum, block) => sum + block.physicalHeight, 0) +
+      Math.max(0, blocks.length - 1) * GAP_V;
+    return Math.min(
+      Math.abs(Math.log((rowWidth / rowHeight) / target)),
+      Math.abs(Math.log((columnWidth / columnHeight) / target)),
+    );
+  }
+
+  private estimatedChildCombinationRatioRange(
+    blocks: SubtreeBlock[],
+  ): { min: number; max: number } {
+    const rowWidth = blocks.reduce((sum, block) => sum + block.physicalWidth, 0) +
+      Math.max(0, blocks.length - 1) * GAP_H;
+    const rowHeight = Math.max(...blocks.map((block) => block.physicalHeight));
+    const columnWidth = Math.max(...blocks.map((block) => block.physicalWidth));
+    const columnHeight = blocks.reduce((sum, block) => sum + block.physicalHeight, 0) +
+      Math.max(0, blocks.length - 1) * GAP_V;
+    const rowRatio = rowWidth / rowHeight;
+    const columnRatio = columnWidth / columnHeight;
+    return {
+      min: Math.min(rowRatio, columnRatio),
+      max: Math.max(rowRatio, columnRatio),
+    };
+  }
+
+  private childCombinationKey(blocks: SubtreeBlock[]): string {
+    return blocks.map((block) => block.signature).join('\u0001');
+  }
+
+  private compareChildCombinationHierarchy(
+    a: SubtreeBlock[],
+    b: SubtreeBlock[],
+  ): number {
+    const sum = (blocks: SubtreeBlock[], metric: (block: SubtreeBlock) => number) =>
+      blocks.reduce((total, block) => total + metric(block), 0);
+    return sum(a, (block) => block.rankInversionCount) -
+      sum(b, (block) => block.rankInversionCount) ||
+      sum(a, (block) => block.routeOverlapCount) -
+      sum(b, (block) => block.routeOverlapCount) ||
+      sum(a, (block) => block.rowCount) - sum(b, (block) => block.rowCount) ||
+      sum(a, (block) => block.peerBandDelay) -
+      sum(b, (block) => block.peerBandDelay) ||
+      Math.max(...a.map((block) => block.maxPeerBandOffset)) -
+      Math.max(...b.map((block) => block.maxPeerBandOffset));
   }
 
   private generatePartitions(
-    variants: LayoutVariant[],
+    variants: SubtreeBlock[],
     direction: LayoutDirection,
   ): number[][][] {
     const count = variants.length;
@@ -310,73 +477,125 @@ export class AdaptiveOrgLayoutService {
       }
       return Array.from(partitions.values());
     }
-
-    add([Array.from({ length: count }, (_, index) => index)]);
-    add(Array.from({ length: count }, (_, index) => [index]));
-    for (let rowCount = 2; rowCount <= Math.min(8, count - 1); rowCount++) {
-      add(this.partitionByCount(count, rowCount));
-      add(this.partitionByBreadth(variants, rowCount, direction));
-    }
-    return Array.from(partitions.values());
-  }
-
-  private partitionByCount(count: number, rowCount: number): number[][] {
-    const rows: number[][] = [];
-    let start = 0;
-    for (let row = 0; row < rowCount; row++) {
-      const size = Math.ceil((count - start) / (rowCount - row));
-      rows.push(Array.from({ length: size }, (_, offset) => start + offset));
-      start += size;
-    }
-    return rows;
-  }
-
-  private partitionByBreadth(
-    variants: LayoutVariant[],
-    rowCount: number,
-    direction: LayoutDirection,
-  ): number[][] {
-    const breadths = variants.map((variant) =>
-      direction === LayoutDirection.LeftRight ? variant.physicalHeight : variant.physicalWidth,
-    );
-    const target = breadths.reduce((sum, breadth) => sum + breadth, 0) / rowCount;
-    const rows: number[][] = [];
-    let current: number[] = [];
-    let currentBreadth = 0;
-
-    for (let index = 0; index < variants.length; index++) {
-      const rowsLeftAfterThis = rowCount - rows.length - 1;
-      const childrenAfterThis = variants.length - index - 1;
-      const breadth = breadths[index]!;
-      if (
-        current.length > 0 &&
-        rows.length < rowCount - 1 &&
-        currentBreadth + breadth > target &&
-        childrenAfterThis >= rowsLeftAfterThis
-      ) {
-        rows.push(current);
-        current = [];
-        currentBreadth = 0;
+    let states: number[][][] = [[[0]]];
+    for (let childIndex = 1; childIndex < count; childIndex++) {
+      const expanded: number[][][] = [];
+      for (const state of states) {
+        const appended = state.map((row) => [...row]);
+        appended[appended.length - 1]!.push(childIndex);
+        expanded.push(appended);
+        expanded.push([...state.map((row) => [...row]), [childIndex]]);
       }
-      current.push(index);
-      currentBreadth += breadth;
+      states = this.prunePartitionStates(
+        expanded,
+        variants.slice(0, childIndex + 1),
+        direction,
+      );
     }
-    if (current.length > 0) rows.push(current);
-    while (rows.length < rowCount) {
-      const donor = rows.findIndex((row) => row.length > 1);
-      if (donor < 0) break;
-      const moved = rows[donor]!.pop()!;
-      rows.splice(donor + 1, 0, [moved]);
-    }
-    return rows;
+    return states;
   }
 
-  private composeVariant(
+  private prunePartitionStates(
+    states: number[][][],
+    variants: SubtreeBlock[],
+    direction: LayoutDirection,
+  ): number[][][] {
+    const unique = new Map<string, number[][]>();
+    for (const state of states) unique.set(this.partitionKey(state), state);
+    const candidates = Array.from(unique.values());
+    if (candidates.length <= MAX_PARTITION_STATES) {
+      return candidates.sort((a, b) => this.partitionKey(a).localeCompare(this.partitionKey(b)));
+    }
+
+    const kept = new Map<string, number[][]>();
+    const add = (state: number[][]) => kept.set(this.partitionKey(state), state);
+    const minimumBy = (metric: (state: number[][]) => number): number[][] =>
+      [...candidates].sort((a, b) =>
+        metric(a) - metric(b) || this.partitionKey(a).localeCompare(this.partitionKey(b)),
+      )[0]!;
+    add(minimumBy((state) => state.length));
+    add(minimumBy((state) => -state.length));
+    add(minimumBy((state) => this.partitionSingletonTail(state)));
+    add(minimumBy((state) => this.partitionImbalance(state)));
+    add(minimumBy((state) => this.estimatePartitionGeometry(state, variants, direction).area));
+    for (const profile of ASPECT_PROFILES) {
+      add(minimumBy((state) => Math.abs(Math.log(
+        this.estimatePartitionGeometry(state, variants, direction).ratio / profile,
+      ))));
+    }
+    const remaining = [...candidates].sort((a, b) =>
+      this.partitionDelay(a) - this.partitionDelay(b) ||
+      this.partitionImbalance(a) - this.partitionImbalance(b) ||
+      this.partitionKey(a).localeCompare(this.partitionKey(b)),
+    );
+    for (const state of remaining) {
+      add(state);
+      if (kept.size >= MAX_PARTITION_STATES) break;
+    }
+    return Array.from(kept.values()).sort((a, b) =>
+      this.partitionKey(a).localeCompare(this.partitionKey(b)),
+    );
+  }
+
+  private estimatePartitionGeometry(
+    rows: number[][],
+    variants: SubtreeBlock[],
+    direction: LayoutDirection,
+  ): { ratio: number; area: number } {
+    const cardBreadth = direction === LayoutDirection.LeftRight ? CARD_HEIGHT : CARD_WIDTH;
+    const cardDepth = direction === LayoutDirection.LeftRight ? CARD_WIDTH : CARD_HEIGHT;
+    const rowStep = cardDepth + GAP_V;
+    const logicalWidth = Math.max(
+      cardBreadth,
+      ...rows.map((row) => row.reduce(
+        (sum, index) => sum + variants[index]!.logicalWidth,
+        Math.max(0, row.length - 1) * GAP_H,
+      )),
+    );
+    const logicalHeight = Math.max(
+      cardDepth,
+      ...rows.map((row, rowIndex) =>
+        rowStep * (rowIndex + 1) + Math.max(...row.map((index) =>
+          variants[index]!.logicalHeight,
+        )),
+      ),
+    );
+    const physicalWidth = direction === LayoutDirection.LeftRight
+      ? logicalHeight
+      : logicalWidth;
+    const physicalHeight = direction === LayoutDirection.LeftRight
+      ? logicalWidth
+      : logicalHeight;
+    return {
+      ratio: physicalWidth / physicalHeight,
+      area: physicalWidth * physicalHeight,
+    };
+  }
+
+  private partitionKey(rows: readonly (readonly number[])[]): string {
+    return rows.map((row) => row.length).join('.');
+  }
+
+  private partitionDelay(rows: readonly (readonly number[])[]): number {
+    return rows.reduce((sum, row, index) => sum + row.length * index, 0);
+  }
+
+  private partitionImbalance(rows: readonly (readonly number[])[]): number {
+    const lengths = rows.map((row) => row.length);
+    return Math.max(...lengths) - Math.min(...lengths);
+  }
+
+  private partitionSingletonTail(rows: readonly (readonly number[])[]): number {
+    return rows.length > 1 && rows[rows.length - 1]!.length === 1 ? 1 : 0;
+  }
+
+  private composeVariantRaw(
     node: HierarchyNode,
-    children: LayoutVariant[],
+    children: SubtreeBlock[],
     rowIndexes: number[][],
     direction: LayoutDirection,
-  ): LayoutVariant | null {
+  ): SubtreeBlock | null {
+    if (!this.isCompleteOrderedPartition(rowIndexes, children.length)) return null;
     const cardBreadth = direction === LayoutDirection.LeftRight ? CARD_HEIGHT : CARD_WIDTH;
     const cardDepth = direction === LayoutDirection.LeftRight ? CARD_WIDTH : CARD_HEIGHT;
     const placements = new Map<HierarchyNode, LogicalPoint>([[node, { breadth: 0, depth: 0 }]]);
@@ -391,7 +610,9 @@ export class AdaptiveOrgLayoutService {
     const rowsByParent = new Map<string, string[][]>();
     rowsByParent.set(
       String(node.data.id),
-      rowIndexes.map((row) => row.map((index) => String((node.children ?? [])[index]!.data.id))),
+      rowIndexes.map((row) => row.map((index) =>
+        String((node.children ?? [])[index]!.data.id),
+      )),
     );
 
     const rowStep = cardDepth + GAP_V;
@@ -409,6 +630,9 @@ export class AdaptiveOrgLayoutService {
         rowTop,
         commonChannelDepth,
         rects,
+        routes,
+        node,
+        indexes.map((index) => (node.children ?? [])[index]!),
         rowIndex < rowIndexes.length - 1,
         rowIndex,
       );
@@ -466,7 +690,10 @@ export class AdaptiveOrgLayoutService {
         }
 
         const source = { breadth: 0, depth: cardDepth };
-        const target = { breadth: breadthOffset, depth: rowTop };
+        const target = {
+          breadth: breadthOffset + child.entryPort.breadth,
+          depth: rowTop + child.entryPort.depth,
+        };
         const route = this.parentChildRoute(source, target);
         routes.set(this.linkKey(node, childNode), route);
         connectorLength += this.routeLength(route);
@@ -482,12 +709,15 @@ export class AdaptiveOrgLayoutService {
       (sum, row, rowIndex) => sum + row.length * rowIndex,
       0,
     );
-    return this.finalizeVariant({
+    return this.finalizeBlock({
       placements,
       rects,
       routes,
       rowsByParent,
       connectorLength,
+      peerBandCount: rowIndexes.length,
+      peerBandImbalance: Math.max(...rowLengths) - Math.min(...rowLengths),
+      peerItemCount: children.length,
       rowCount: rowIndexes.length + nestedRowCount,
       maxPeerBandOffset: Math.max(
         (rowIndexes.length - 1) * rowStep,
@@ -519,11 +749,12 @@ export class AdaptiveOrgLayoutService {
    */
   private composeRosterVariant(
     node: HierarchyNode,
-    children: LayoutVariant[],
+    children: SubtreeBlock[],
     rowIndexes: number[][],
     direction: LayoutDirection,
-  ): LayoutVariant | null {
+  ): SubtreeBlock | null {
     if (
+      !this.isCompleteOrderedPartition(rowIndexes, children.length) ||
       direction !== LayoutDirection.TopDown ||
       rowIndexes.length < 2 ||
       !rowIndexes.every((row) => row.length === 1) ||
@@ -593,12 +824,15 @@ export class AdaptiveOrgLayoutService {
       connectorLength += this.routeLength(route);
     }
 
-    const variant = this.finalizeVariant({
+    const variant = this.finalizeBlock({
       placements,
       rects,
       routes,
       rowsByParent,
       connectorLength,
+      peerBandCount: rowIndexes.length,
+      peerBandImbalance: 0,
+      peerItemCount: children.length,
       rowCount: rowIndexes.length,
       maxPeerBandOffset: (rowIndexes.length - 1) * rowStep,
       peerBandDelay: rowIndexes.reduce((sum, _row, index) => sum + index, 0),
@@ -613,8 +847,17 @@ export class AdaptiveOrgLayoutService {
     return this.isVariantValid(variant) ? variant : null;
   }
 
+  private isCompleteOrderedPartition(
+    rows: readonly (readonly number[])[],
+    childCount: number,
+  ): boolean {
+    const flattened = rows.flat();
+    return flattened.length === childCount &&
+      flattened.every((childIndex, index) => childIndex === index);
+  }
+
   private packRow(
-    variants: LayoutVariant[],
+    variants: SubtreeBlock[],
     requiresThroughChannel: boolean,
     rowIndex: number,
   ): number[] {
@@ -673,10 +916,13 @@ export class AdaptiveOrgLayoutService {
    * row may move complete child subtrees horizontally, but never vertically.
    */
   private packRowAgainstObstacles(
-    variants: LayoutVariant[],
+    variants: SubtreeBlock[],
     rowTop: number,
     channelDepth: number,
     obstacles: LogicalRect[],
+    existingRoutes: ReadonlyMap<string, LogicalPoint[]>,
+    parentNode: HierarchyNode,
+    childNodes: HierarchyNode[],
     requiresThroughChannel: boolean,
     rowIndex: number,
   ): number[] | null {
@@ -688,12 +934,14 @@ export class AdaptiveOrgLayoutService {
         rowTop,
         channelDepth,
         obstacles,
+        existingRoutes,
+        parentNode,
+        childNodes,
         requiresThroughChannel,
       )) {
         candidates.set(offsets.map((offset) => offset.toFixed(3)).join(','), offsets);
       }
     };
-
     add(this.packRow(variants, requiresThroughChannel, rowIndex));
     for (let split = 0; split <= variants.length; split++) {
       add(this.packAroundObstacles(
@@ -715,7 +963,7 @@ export class AdaptiveOrgLayoutService {
   }
 
   private packAroundObstacles(
-    variants: LayoutVariant[],
+    variants: SubtreeBlock[],
     split: number,
     rowTop: number,
     channelDepth: number,
@@ -763,7 +1011,7 @@ export class AdaptiveOrgLayoutService {
   }
 
   private findNearestClearOffset(
-    variant: LayoutVariant,
+    variant: SubtreeBlock,
     rowTop: number,
     channelDepth: number,
     obstacles: LogicalRect[],
@@ -812,11 +1060,14 @@ export class AdaptiveOrgLayoutService {
   }
 
   private isRowPlacementValid(
-    variants: LayoutVariant[],
+    variants: SubtreeBlock[],
     offsets: number[],
     rowTop: number,
     channelDepth: number,
     obstacles: LogicalRect[],
+    existingRoutes: ReadonlyMap<string, LogicalPoint[]>,
+    parentNode: HierarchyNode,
+    childNodes: HierarchyNode[],
     requiresThroughChannel: boolean,
   ): boolean {
     if (offsets.length !== variants.length || offsets.some((offset) => !Number.isFinite(offset))) {
@@ -848,11 +1099,37 @@ export class AdaptiveOrgLayoutService {
         if (!this.rectsHaveClearance(translated[first]!, obstacle)) return false;
       }
     }
-    return true;
+
+    const newRoutes = new Map<string, LogicalPoint[]>();
+    for (let index = 0; index < variants.length; index++) {
+      const breadthOffset = offsets[index]!;
+      for (const [key, route] of variants[index]!.routes) {
+        newRoutes.set(key, route.map((point) => ({
+          breadth: point.breadth + breadthOffset,
+          depth: point.depth + rowTop,
+        })));
+      }
+      const source = {
+        breadth: 0,
+        depth: channelDepth - GAP_V / 2,
+      };
+      const target = {
+        breadth: breadthOffset + variants[index]!.entryPort.breadth,
+        depth: rowTop + variants[index]!.entryPort.depth,
+      };
+      newRoutes.set(
+        this.linkKey(parentNode, childNodes[index]!),
+        this.parentChildRoute(source, target),
+      );
+    }
+    return this.routesClearRects(existingRoutes, translated) &&
+      this.routesClearRects(newRoutes, [...obstacles, ...translated]) &&
+      !this.routeMapsHaveForeignIntersection(existingRoutes, newRoutes) &&
+      this.countAmbiguousRouteOverlaps(newRoutes) === 0;
   }
 
   private rowPlacementScore(
-    variants: LayoutVariant[],
+    variants: SubtreeBlock[],
     offsets: number[],
     rowTop: number,
     obstacles: LogicalRect[],
@@ -899,7 +1176,7 @@ export class AdaptiveOrgLayoutService {
     return false;
   }
 
-  private centerOffsetsByBounds(variants: LayoutVariant[], offsets: number[]): number[] {
+  private centerOffsetsByBounds(variants: SubtreeBlock[], offsets: number[]): number[] {
     if (variants.length === 0) return [];
     const min = Math.min(...variants.map((variant, index) => offsets[index]! + variant.minBreadth));
     const max = Math.max(...variants.map((variant, index) => offsets[index]! + variant.maxBreadth));
@@ -907,7 +1184,7 @@ export class AdaptiveOrgLayoutService {
     return offsets.map((offset) => offset + shift);
   }
 
-  private packSequentially(variants: LayoutVariant[]): number[] {
+  private packSequentially(variants: SubtreeBlock[]): number[] {
     if (variants.length === 0) return [];
     const offsets = [0];
     const accumulated: LogicalRect[] = variants[0]!.rects.map((rect) => ({ ...rect }));
@@ -950,7 +1227,7 @@ export class AdaptiveOrgLayoutService {
     ];
   }
 
-  private isVariantValid(variant: LayoutVariant): boolean {
+  private isVariantValid(variant: SubtreeBlock): boolean {
     for (let first = 0; first < variant.rects.length; first++) {
       for (let second = first + 1; second < variant.rects.length; second++) {
         if (!this.rectsHaveClearance(variant.rects[first]!, variant.rects[second]!)) {
@@ -959,13 +1236,21 @@ export class AdaptiveOrgLayoutService {
       }
     }
 
-    for (const [key, route] of variant.routes) {
+    return this.routesClearRects(variant.routes, variant.rects) &&
+      variant.routeOverlapCount === 0;
+  }
+
+  private routesClearRects(
+    routes: ReadonlyMap<string, LogicalPoint[]>,
+    rects: readonly LogicalRect[],
+  ): boolean {
+    for (const [key, route] of routes) {
       const [sourceId, targetId] = key.split('\u0000');
       for (let index = 1; index < route.length; index++) {
         const start = route[index - 1]!;
         const end = route[index]!;
         if (start.breadth !== end.breadth && start.depth !== end.depth) return false;
-        for (const rect of variant.rects) {
+        for (const rect of rects) {
           if (rect.id === sourceId || rect.id === targetId) continue;
           if (this.segmentIntersectsLogicalRect(start, end, rect, LINK_CARD_PADDING)) {
             return false;
@@ -977,62 +1262,70 @@ export class AdaptiveOrgLayoutService {
   }
 
   private countAmbiguousRouteOverlaps(routes: Map<string, LogicalPoint[]>): number {
-    const entries = Array.from(routes.entries()).map(([key, route]) => ({
-      sourceId: key.split('\u0000')[0]!,
-      route,
-    }));
+    const segments = this.buildOwnedRouteSegments(routes);
     let count = 0;
-    for (let first = 0; first < entries.length; first++) {
-      for (let second = first + 1; second < entries.length; second++) {
-        const a = entries[first]!;
-        const b = entries[second]!;
-        if (a.sourceId === b.sourceId) continue;
-        for (let aIndex = 1; aIndex < a.route.length; aIndex++) {
-          for (let bIndex = 1; bIndex < b.route.length; bIndex++) {
-            if (this.orthogonalSegmentsOverlap(
-              a.route[aIndex - 1]!,
-              a.route[aIndex]!,
-              b.route[bIndex - 1]!,
-              b.route[bIndex]!,
-            )) count++;
-          }
+    for (let first = 0; first < segments.length; first++) {
+      for (let second = first + 1; second < segments.length; second++) {
+        const a = segments[first]!;
+        const b = segments[second]!;
+        if (a.ownerId === b.ownerId) continue;
+        if (classifyOrthogonalSegments(a.start, a.end, b.start, b.end) !== 'none') {
+          count++;
         }
       }
     }
     return count;
   }
 
-  private orthogonalSegmentsOverlap(
-    aStart: LogicalPoint,
-    aEnd: LogicalPoint,
-    bStart: LogicalPoint,
-    bEnd: LogicalPoint,
-  ): boolean {
-    const aHorizontal = aStart.depth === aEnd.depth;
-    const bHorizontal = bStart.depth === bEnd.depth;
-    if (aHorizontal && bHorizontal) {
-      if (aStart.depth !== bStart.depth) return false;
-      return this.rangesOverlap(
-        aStart.breadth,
-        aEnd.breadth,
-        bStart.breadth,
-        bEnd.breadth,
-      );
+  private buildOwnedRouteSegments(
+    routes: ReadonlyMap<string, readonly LogicalPoint[]>,
+  ): OwnedRouteSegment[] {
+    const segments: OwnedRouteSegment[] = [];
+    for (const [key, route] of routes) {
+      const [sourceId = '', targetId = ''] = key.split('\u0000');
+      for (let index = 1; index < route.length; index++) {
+        segments.push({
+          ownerId: sourceId,
+          sourceId,
+          targetId,
+          start: { ...route[index - 1]! },
+          end: { ...route[index]! },
+        });
+      }
     }
-    if (!aHorizontal && !bHorizontal) {
-      return aStart.breadth === bStart.breadth && this.rangesOverlap(
-        aStart.depth,
-        aEnd.depth,
-        bStart.depth,
-        bEnd.depth,
-      );
-    }
-    return false;
+    return segments;
   }
 
-  private rangesOverlap(a1: number, a2: number, b1: number, b2: number): boolean {
-    return Math.max(Math.min(a1, a2), Math.min(b1, b2)) <=
-      Math.min(Math.max(a1, a2), Math.max(b1, b2)) + 0.001;
+  private routeMapsHaveForeignIntersection(
+    firstRoutes: ReadonlyMap<string, LogicalPoint[]>,
+    secondRoutes: ReadonlyMap<string, LogicalPoint[]>,
+  ): boolean {
+    const firstEntries = Array.from(firstRoutes.entries()).map(([key, route]) => ({
+      ownerId: key.split('\u0000')[0]!,
+      route,
+    }));
+    const secondEntries = Array.from(secondRoutes.entries()).map(([key, route]) => ({
+      ownerId: key.split('\u0000')[0]!,
+      route,
+    }));
+    for (const first of firstEntries) {
+      for (const second of secondEntries) {
+        if (first.ownerId === second.ownerId) continue;
+        for (let firstIndex = 1; firstIndex < first.route.length; firstIndex++) {
+          for (let secondIndex = 1; secondIndex < second.route.length; secondIndex++) {
+            if (classifyOrthogonalSegments(
+              first.route[firstIndex - 1]!,
+              first.route[firstIndex]!,
+              second.route[secondIndex - 1]!,
+              second.route[secondIndex]!,
+            ) !== 'none') {
+              return true;
+            }
+          }
+        }
+      }
+    }
+    return false;
   }
 
   private segmentIntersectsLogicalRect(
@@ -1055,8 +1348,10 @@ export class AdaptiveOrgLayoutService {
       Math.min(start.depth, end.depth) < maxDepth - 0.001;
   }
 
-  private finalizeVariant(
-    partial: Omit<LayoutVariant,
+  private finalizeBlock(
+    partial: Omit<SubtreeBlock,
+      | 'routeSegments'
+      | 'entryPort'
       | 'minBreadth'
       | 'maxBreadth'
       | 'minDepth'
@@ -1067,19 +1362,39 @@ export class AdaptiveOrgLayoutService {
       | 'physicalHeight'
     >,
     direction: LayoutDirection,
-  ): LayoutVariant {
+  ): SubtreeBlock {
     const minBreadth = Math.min(...partial.rects.map((rect) => rect.minBreadth));
     const maxBreadth = Math.max(...partial.rects.map((rect) => rect.maxBreadth));
     const minDepth = Math.min(...partial.rects.map((rect) => rect.minDepth));
     const maxDepth = Math.max(...partial.rects.map((rect) => rect.maxDepth));
-    const logicalWidth = maxBreadth - minBreadth;
-    const logicalHeight = maxDepth - minDepth;
+    const routeSegments = this.buildOwnedRouteSegments(partial.routes);
+    const routePoints = routeSegments.flatMap((segment) => [segment.start, segment.end]);
+    const occupiedMinBreadth = Math.min(
+      minBreadth,
+      ...routePoints.map((point) => point.breadth - LINK_CARD_PADDING),
+    );
+    const occupiedMaxBreadth = Math.max(
+      maxBreadth,
+      ...routePoints.map((point) => point.breadth + LINK_CARD_PADDING),
+    );
+    const occupiedMinDepth = Math.min(
+      minDepth,
+      ...routePoints.map((point) => point.depth - LINK_CARD_PADDING),
+    );
+    const occupiedMaxDepth = Math.max(
+      maxDepth,
+      ...routePoints.map((point) => point.depth + LINK_CARD_PADDING),
+    );
+    const logicalWidth = occupiedMaxBreadth - occupiedMinBreadth;
+    const logicalHeight = occupiedMaxDepth - occupiedMinDepth;
     return {
       ...partial,
-      minBreadth,
-      maxBreadth,
-      minDepth,
-      maxDepth,
+      routeSegments,
+      entryPort: { breadth: 0, depth: 0 },
+      minBreadth: occupiedMinBreadth,
+      maxBreadth: occupiedMaxBreadth,
+      minDepth: occupiedMinDepth,
+      maxDepth: occupiedMaxDepth,
       logicalWidth,
       logicalHeight,
       physicalWidth: direction === LayoutDirection.LeftRight ? logicalHeight : logicalWidth,
@@ -1087,8 +1402,28 @@ export class AdaptiveOrgLayoutService {
     };
   }
 
-  private pruneVariants(variants: LayoutVariant[]): LayoutVariant[] {
-    const bySignature = new Map<string, LayoutVariant>();
+  private extendBoundsWithRoutes(
+    bounds: LayoutBounds,
+    routes: ReadonlyMap<string, readonly LayoutPoint[]>,
+  ): LayoutBounds {
+    const points = Array.from(routes.values()).flat();
+    if (points.length === 0) return bounds;
+    const minX = Math.min(bounds.minX, ...points.map((point) => point.x));
+    const maxX = Math.max(bounds.maxX, ...points.map((point) => point.x));
+    const minY = Math.min(bounds.minY, ...points.map((point) => point.y));
+    const maxY = Math.max(bounds.maxY, ...points.map((point) => point.y));
+    return {
+      minX,
+      maxX,
+      minY,
+      maxY,
+      treeWidth: maxX - minX,
+      treeHeight: maxY - minY,
+    };
+  }
+
+  private pruneBlocks(variants: SubtreeBlock[]): SubtreeBlock[] {
+    const bySignature = new Map<string, SubtreeBlock>();
     for (const variant of variants) {
       if (this.isVariantValid(variant)) bySignature.set(variant.signature, variant);
     }
@@ -1096,22 +1431,44 @@ export class AdaptiveOrgLayoutService {
     if (unique.length === 0) {
       throw new Error('No valid layout candidates remain after pruning.');
     }
-    if (unique.length <= MAX_VARIANTS_PER_NODE) {
-      return unique.sort((a, b) => a.signature.localeCompare(b.signature));
+    const nondominated = unique.filter((candidate) => !unique.some((other) =>
+      other !== candidate && this.hierarchyDominates(other, candidate),
+    ));
+    if (nondominated.length <= MAX_VARIANTS_PER_NODE) {
+      return nondominated.sort((a, b) => a.signature.localeCompare(b.signature));
     }
 
-    const kept = new Map<string, LayoutVariant>();
-    const add = (variant: LayoutVariant) => kept.set(variant.signature, variant);
-    add(this.minVariant(unique, (variant) => variant.physicalWidth * variant.physicalHeight));
-    add(this.minVariant(unique, (variant) => variant.physicalWidth));
-    add(this.minVariant(unique, (variant) => variant.physicalHeight));
-    add(this.minVariant(unique, (variant) => variant.connectorLength));
-    for (const profile of ASPECT_PROFILES) {
-      const ranked = this.rankVariantsForTarget(unique, profile);
-      for (const variant of ranked.slice(0, 2)) add(variant);
+    const kept = new Map<string, SubtreeBlock>();
+    const add = (variant: SubtreeBlock) => kept.set(variant.signature, variant);
+    add(this.minVariant(nondominated, (variant) => variant.physicalWidth * variant.physicalHeight));
+    add(this.minVariant(nondominated, (variant) => variant.physicalWidth));
+    add(this.minVariant(nondominated, (variant) => variant.physicalHeight));
+    add(this.minVariant(nondominated, (variant) => variant.connectorLength));
+    add(this.minVariant(nondominated, (variant) => variant.physicalWidth / variant.physicalHeight));
+    add(this.minVariant(nondominated, (variant) => -variant.physicalWidth / variant.physicalHeight));
+    // This anchor makes hierarchy quality part of every bounded Pareto frontier,
+    // rather than hoping a ratio/area extreme happens to retain it.
+    add(this.minHierarchyVariant(nondominated));
+
+    const profileRankings = ASPECT_PROFILES.map((profile) => ({
+      profile,
+      ranked: this.rankVariantsForTarget(nondominated, profile),
+    }));
+    // Preserve the full ratio range before spending remaining slots on local
+    // diversity. Extreme profiles receive their runner-up first because broad
+    // near-square tiers are already represented by the hierarchy/size anchors.
+    for (const { ranked } of profileRankings) add(ranked[0]!);
+    const secondaryRankings = [...profileRankings].sort((a, b) =>
+      Math.abs(Math.log2(b.profile)) - Math.abs(Math.log2(a.profile)) ||
+      a.profile - b.profile,
+    );
+    for (const { ranked } of secondaryRankings) {
+      if (kept.size >= MAX_VARIANTS_PER_NODE) break;
+      const secondary = ranked[1];
+      if (secondary) add(secondary);
     }
     if (kept.size < MAX_VARIANTS_PER_NODE) {
-      const remaining = [...unique].sort((a, b) =>
+      const remaining = [...nondominated].sort((a, b) =>
         (a.physicalWidth * a.physicalHeight) - (b.physicalWidth * b.physicalHeight) ||
         a.signature.localeCompare(b.signature),
       );
@@ -1123,21 +1480,72 @@ export class AdaptiveOrgLayoutService {
     return Array.from(kept.values()).sort((a, b) => a.signature.localeCompare(b.signature));
   }
 
-  private selectVariant(variants: LayoutVariant[], target: number): LayoutVariant {
+  private hierarchyDominates(
+    better: SubtreeBlock,
+    worse: SubtreeBlock,
+  ): boolean {
+    return better.routeOverlapCount <= worse.routeOverlapCount &&
+      better.rankInversionCount <= worse.rankInversionCount &&
+      better.peerBandCount < worse.peerBandCount &&
+      better.peerBandDelay <= worse.peerBandDelay &&
+      better.maxPeerBandOffset <= worse.maxPeerBandOffset + 0.001 &&
+      better.logicalWidth <=
+        worse.logicalWidth * Math.exp(HIERARCHY_BREADTH_TOLERANCE) + 0.001;
+  }
+
+  private selectBlock(variants: SubtreeBlock[], target: number): SubtreeBlock {
     return this.rankVariantsForTarget(variants, target)[0]!;
   }
 
-  private selectValidVariant(variants: LayoutVariant[], target: number): LayoutVariant {
+  private selectValidBlock(variants: SubtreeBlock[], target: number): SubtreeBlock {
     const valid = variants.filter((variant) => this.isVariantValid(variant));
-    const selected = this.rankVariantsForTarget(valid, target)[0];
+    const selected = this.rankFinalVariantsForTarget(valid, target)[0];
     if (!selected) throw new Error('No valid complete layout candidate.');
     return selected;
   }
 
-  private rankVariantsForTarget(
-    variants: LayoutVariant[],
+  private rankFinalVariantsForTarget(
+    variants: SubtreeBlock[],
     target: number,
-  ): LayoutVariant[] {
+  ): SubtreeBlock[] {
+    const minimumRouteOverlaps = Math.min(
+      ...variants.map((variant) => variant.routeOverlapCount),
+    );
+    const safetyGroup = variants.filter((variant) =>
+      variant.routeOverlapCount === minimumRouteOverlaps,
+    );
+    const minimumRatioError = Math.min(
+      ...safetyGroup.map((variant) => this.ratioError(variant, target)),
+    );
+    const ratioSuitable = safetyGroup.filter((variant) =>
+      this.ratioError(variant, target) <=
+        minimumRatioError + this.finalRatioTolerance(),
+    );
+
+    return [...ratioSuitable].sort((a, b) =>
+      a.rankInversionCount - b.rankInversionCount ||
+      a.peerBandCount - b.peerBandCount ||
+      a.peerBandImbalance - b.peerBandImbalance ||
+      a.rowCount - b.rowCount ||
+      a.singletonTailCount - b.singletonTailCount ||
+      a.peerBandDelay - b.peerBandDelay ||
+      a.physicalWidth * a.physicalHeight - b.physicalWidth * b.physicalHeight ||
+      a.maxPeerBandOffset - b.maxPeerBandOffset ||
+      a.connectorLength - b.connectorLength ||
+      a.rowImbalance - b.rowImbalance ||
+      this.ratioError(a, target) - this.ratioError(b, target) ||
+      a.signature.localeCompare(b.signature)
+    );
+  }
+
+  private finalRatioTolerance(): number {
+    return FINAL_RATIO_TOLERANCE;
+  }
+
+  private rankVariantsForTarget(
+    variants: SubtreeBlock[],
+    target: number,
+  ): SubtreeBlock[] {
     const entries = variants.map((variant) => ({
       variant,
       ratioError: this.ratioError(variant, target),
@@ -1161,9 +1569,11 @@ export class AdaptiveOrgLayoutService {
     }
 
     return entries.sort((a, b) =>
-      a.variant.rankInversionCount - b.variant.rankInversionCount ||
       a.variant.routeOverlapCount - b.variant.routeOverlapCount ||
       a.ratioTier - b.ratioTier ||
+      a.variant.rankInversionCount - b.variant.rankInversionCount ||
+      a.variant.peerBandCount - b.variant.peerBandCount ||
+      a.variant.peerBandImbalance - b.variant.peerBandImbalance ||
       a.variant.rowCount - b.variant.rowCount ||
       a.variant.singletonTailCount - b.variant.singletonTailCount ||
       a.variant.peerBandDelay - b.variant.peerBandDelay ||
@@ -1177,8 +1587,8 @@ export class AdaptiveOrgLayoutService {
     ).map((entry) => entry.variant);
   }
 
-  private safetyGroupKey(variant: LayoutVariant): string {
-    return `${variant.rankInversionCount}\u0000${variant.routeOverlapCount}`;
+  private safetyGroupKey(variant: SubtreeBlock): string {
+    return String(variant.routeOverlapCount);
   }
 
   private ratioTierWidth(target: number): number {
@@ -1189,16 +1599,32 @@ export class AdaptiveOrgLayoutService {
     );
   }
 
-  private ratioError(variant: LayoutVariant, target: number): number {
+  private ratioError(variant: SubtreeBlock, target: number): number {
     return Math.abs(Math.log((variant.physicalWidth / variant.physicalHeight) / target));
   }
 
   private minVariant(
-    variants: LayoutVariant[],
-    metric: (variant: LayoutVariant) => number,
-  ): LayoutVariant {
+    variants: SubtreeBlock[],
+    metric: (variant: SubtreeBlock) => number,
+  ): SubtreeBlock {
     return [...variants].sort((a, b) =>
       metric(a) - metric(b) || a.signature.localeCompare(b.signature),
+    )[0]!;
+  }
+
+  private minHierarchyVariant(variants: SubtreeBlock[]): SubtreeBlock {
+    return [...variants].sort((a, b) =>
+      a.rankInversionCount - b.rankInversionCount ||
+      a.routeOverlapCount - b.routeOverlapCount ||
+      a.peerBandCount - b.peerBandCount ||
+      a.rowCount - b.rowCount ||
+      a.peerBandDelay - b.peerBandDelay ||
+      a.maxPeerBandOffset - b.maxPeerBandOffset ||
+      a.singletonTailCount - b.singletonTailCount ||
+      a.rowImbalance - b.rowImbalance ||
+      a.physicalWidth * a.physicalHeight - b.physicalWidth * b.physicalHeight ||
+      a.connectorLength - b.connectorLength ||
+      a.signature.localeCompare(b.signature)
     )[0]!;
   }
 

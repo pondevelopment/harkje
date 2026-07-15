@@ -56,7 +56,7 @@ and adheres to [Semantic Versioning](https://semver.org/).
   provide import/export of the org as CSV with validation. The sidebar now has
   three editor tabs — Generator, JSON, and CSV.
 - **Adaptive contour layout**: the engine generates fixed-gap ordered row
-  variants and selects the topology closest to the requested aspect ratio.
+  topologies and selects the complete valid block closest to the requested aspect ratio.
   Aspect ratio now recomputes the arrangement instead of stretching distances;
   card and layout gaps stay fixed. Complete subtrees move rigidly, connectors
   use reserved channels, and wrapped peer bands advance by a fixed step instead
@@ -67,9 +67,29 @@ and adheres to [Semantic Versioning](https://semver.org/).
   connector exactly at the required card-clearance boundary. Extreme portrait
   layouts now align visible leaf peers in a single-column roster connected by
   one manager-owned side bus instead of horizontally staggering singleton rows.
-  Manager-owned connector buses remain distinct across wrapped rows, and export
-  adds an exact-ratio outer frame. The former one-shot compaction control is no
-  longer needed.
+  The solver now works bottom-up from leaves into bounded frontiers of immutable
+  subtree blocks. Cards, owned connector segments, entry ports, route-clearance
+  corridors, and bounds move together during recursive parent composition.
+  Perpendicular crossings, collinear overlaps, endpoint touches, and T-junctions
+  between different managers are hard-invalid, so ratio scoring can never select
+  an ambiguous chart. Mixed child frontiers allow one parent to combine differently
+  shaped child blocks without an unbounded Cartesian search. Export includes route
+  extents and adds an exact-ratio outer frame. The former one-shot compaction
+  control is no longer needed.
+- **Ratio-safe recursive optimization**: every bounded subtree frontier retains
+  hierarchy, ratio, area, width, height, and connector extremes, while the
+  16-state child beam preserves hierarchy plus explicit narrow/wide aspect
+  anchors. Final selection
+  first applies hard geometry constraints and a strict `0.08` logarithmic
+  content-ratio envelope, then minimizes recursive hierarchy inversions, peer
+  bands, tails, and delay. This restores meaningful slider-driven topology
+  changes and prevents export padding from hiding an over-wide chart.
+- **Global hierarchy-dominance frontier**: the former greedy adjacent-row merge
+  is replaced by one target-independent Pareto pass over all safe composed
+  candidates, including different child-subtree variants. A layout with extra
+  parent peer bands is removed when a no-worse hierarchy fits within a `0.20`
+  sibling-breadth growth envelope. Parents above eight reports use a bounded
+  32-state ordered-partition beam rather than sampled row counts.
 - **User-owned collapse state**: generated, JSON-edited, and CSV-imported trees
   now start fully expanded; collapse choices apply only to the current chart and
   are cleared when replacement data reuses node ids.

@@ -69,9 +69,15 @@ Key files:
   - `csv-editor-tab.component.ts` — CSV editor
 - `src/app/components/org-chart/org-chart.component.ts`: D3 renderer + SVG rendering + export
 - `src/app/core/adaptive-org-layout.service.ts`: pure layout engine
-  - `computeAdaptiveLayout()` generates fixed-gap ordered row variants and
-    selects the topology closest to the requested aspect ratio.
-  - `buildLinkRoute()` / `buildLinkPath()` use reserved connector channels.
+  - `computeAdaptiveLayout()` solves bottom-up from leaves into bounded
+    frontiers of routing-aware subtree blocks, then selects the complete valid
+    topology closest to the requested aspect ratio.
+  - Each subtree block owns cards, connector segments, entry ports, clearance
+    corridors, bounds, and topology metrics; parent composition translates the
+    complete block rigidly.
+  - `buildLinkRoute()` / `buildLinkPath()` expose the selected reserved-channel routes.
+- `src/app/core/org-layout-geometry.ts`: pure orthogonal-segment relationship
+  classifier used to reject foreign connector crossings, overlaps, and junctions.
 - `src/app/core/org-tree.service.ts`: tree <-> flat conversion
   - `flattenTree()` converts `OrgNode` → `FlatNode[]` for the editor.
   - `buildTree()` converts `FlatNode[]` → `OrgNode` for rendering.
@@ -184,17 +190,46 @@ required. Changing aspect ratio changes row partitions and subtree arrangements,
 not card sizes or gaps. Source child order remains row-major, complete subtrees
 move as rigid blocks, and connectors use reserved channels. Wrapped peer rows
 advance by one fixed card/gap step; a deep subtree never pushes later peers below
-its descendants. Candidate frontiers are cached so ratio changes remain fast.
+its descendants. Layout is solved recursively from the leaves upward: every
+candidate subtree is sealed as one block containing both cards and owned route
+segments before its parent packs it. Candidate frontiers are cached so ratio
+changes remain fast.
+The combinatorial search is bounded: every node retains at most 32 Pareto-style
+candidates, including an explicit hierarchy-optimal candidate, and parent nodes
+combine child choices through a 16-state beam. This avoids greedy local choices
+without attempting an unbounded Cartesian search.
+Narrowest and widest aspect candidates are explicit anchors at node, child-option,
+and beam levels, so pruning cannot silently discard the slider's extremes.
+Parents with up to eight reports enumerate every ordered row cut. Larger parents
+use a 32-state incremental ordered-partition beam that preserves hierarchy,
+balance, area, and aspect-profile anchors. Every topology is fully packed and
+route-validated before one global Pareto pass compares candidates across both
+row partitions and child-subtree variants. A candidate is discarded when another
+safe candidate uses fewer parent peer bands, has no worse hierarchy delay/offset,
+and needs no more than `0.20` logarithmic sibling-breadth growth. There is no
+greedy post-hoc row-merging path. Aspect ratio may change recursive subtree
+topology, but it cannot retain a hierarchy-dominated peer layout to manufacture
+height.
 Candidates are grouped into adaptive ratio-suitability tiers—strict for extreme
 portrait/landscape targets and broader near square. Within a tier, peer rows are
 balanced into the fewest early bands without singleton tails, preventing sparse
 staircases while retaining meaningful topology changes across target ratios.
+Final selection is stricter than frontier construction: first reject unsafe
+geometry, then admit only candidates within `0.08` logarithmic error of the best
+safe content ratio. Hierarchy inversions, peer bands, singleton tails, and delay
+are minimized only inside that ratio envelope. This prevents a very wide or tall
+figure from passing merely because the export frame adds blank padding. The rule
+is orientation-independent because candidate ratios are measured in physical
+width and height.
 At extreme portrait targets, visible leaf peers can use an aligned single-column
 roster with one manager-owned side bus, rather than a misleading zigzag of cards.
 All reports of one manager share that manager's first connector bus; lower-row
 reports descend through reserved columns so unrelated manager lines never merge.
+Any crossing, overlap, endpoint touch, or T-junction between connectors owned by
+different managers is a hard-invalid candidate, regardless of ratio or density.
 PNG export adds a symmetric outer frame so the image matches the requested ratio
-exactly.
+exactly, while tests separately verify the unpadded chart remains near the best
+safe content ratio available on the hierarchy-nondominated frontier.
 
 Every newly generated, imported, or edited organization starts fully expanded.
 Nodes collapse only when the user clicks a manager in the current chart; collapse

@@ -132,6 +132,9 @@ When adding fields to nodes:
   direction, or target-aspect-ratio changes trigger auto-fit.
 - Preserve source child order row-major. Compact by translating complete subtrees
   against their real contours; never add person-specific offsets.
+- Solve post-order from leaves. A candidate subtree block owns its card geometry,
+  connector segments with manager ownership, entry port, route-clearance corridors,
+  bounds, and topology metrics; parents may only translate the complete block.
 - Target aspect ratio selects a fixed-gap layout topology. Never scale coordinates,
   card dimensions, or layout gaps to meet a ratio.
 - Wrapped peer rows advance exactly one card-height + gap step. Never let one
@@ -139,13 +142,37 @@ When adding fields to nodes:
 - Group candidates into adaptive ratio-suitability tiers: strict at extreme
   targets, broader near square. Within a tier, minimize complete peer rows,
   singleton tails, and cumulative band delay; never use person-specific offsets.
+- Every subtree frontier must retain an explicit hierarchy-optimal candidate,
+  and bounded child-combination pruning must preserve a hierarchy-minimal beam
+  entry alongside explicit narrow/wide ratio, area, width, height, and connector
+  extremes. Preserve these aspect anchors in child options and node frontiers;
+  never greedily commit each child to one local aspect profile.
+- Final selection must prioritize hard geometry safety, then a strict content
+  ratio envelope (`0.08` logarithmic error beyond the best safe frontier
+  candidate), then recursive hierarchy quality. Within that envelope, minimize
+  rank inversions, root peer bands, total recursive bands, singleton tails,
+  cumulative delay, and maximum band offset before exact ratio/area tie-breaks.
+  Never force one row outside the earliest-band compaction envelope described
+  below, and never treat export-frame padding as evidence that content ratio is good.
+- Before frontier capping or final scoring, remove hierarchy-dominated candidates
+  globally across row partitions and child-subtree variants. A candidate with
+  extra local peer bands cannot survive when another route-safe candidate has no
+  worse rank inversions, cumulative delay, or maximum band offset and needs no
+  more than `0.20` logarithmic sibling-breadth growth. Do not reintroduce greedy
+  post-hoc row merging.
 - At extreme portrait targets, an all-singleton visible leaf partition may use
   one aligned card column with a manager-owned side bus. Never zigzag leaf peers.
 - Pack later rows horizontally against existing contours, reserve connector
-  channels, and require every route to clear unrelated cards.
+  channels, and require every route to clear unrelated cards and foreign routes.
 - Route all reports of one manager from the first inter-level bus. Lower-row
-  targets descend through reserved columns; minimize shared collinear segments
-  between connectors owned by different managers.
+  targets descend through reserved columns. Reject every crossing, overlap,
+  endpoint touch, or T-junction between connectors owned by different managers;
+  these are hard constraints, never scoring penalties.
+- Combine bounded child-block frontiers incrementally and preserve aspect-ratio
+  diversity; never greedily lock every child to one synchronized local profile.
+- Enumerate every ordered row cut through eight direct reports. Above eight,
+  use a bounded incremental ordered-partition beam with explicit one-row,
+  all-singleton, hierarchy, balance, area, and aspect-profile anchors.
 - Cache target-independent candidate frontiers per visible hierarchy/direction;
   rebuild only when data, collapse state, or direction changes.
 - `OrgChartComponent` exposes imperative `exportImage()` via `@ViewChild`.
