@@ -24,7 +24,7 @@ import { CsvParserService } from '../../core/csv-parser.service';
   template: `
     @let err = error();
     <div class="editor">
-      <label class="editor-label">Structure Data (CSV)</label>
+      <span class="editor-label">Structure Data (CSV)</span>
       <p class="editor-hint">
         Only <code>user</code> and <code>manager</code> are required. Leave
         <code>manager</code> empty (or <code>null</code>) for the single root.
@@ -92,8 +92,8 @@ export class CsvEditorTabComponent {
           'Could not build tree from CSV. Ensure exactly one row has an empty manager (the root).',
         );
       }
-    } catch (e: any) {
-      this.error.set(e?.message ? String(e.message) : 'Invalid CSV format.');
+    } catch (e) {
+      this.error.set(e instanceof Error ? e.message : 'Invalid CSV format.');
     }
   }
 }

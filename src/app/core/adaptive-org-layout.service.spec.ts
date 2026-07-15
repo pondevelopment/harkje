@@ -81,6 +81,61 @@ describe('AdaptiveOrgLayoutService', () => {
       },
     ],
   });
+  const makeConnectorOwnershipTree = (): OrgNode => ({
+    ...leaf('riley-root'),
+    children: [
+      {
+        ...leaf('sam-manager'),
+        children: [leaf('noah-report'), leaf('casey-report'), leaf('taylor-report')],
+      },
+      {
+        ...leaf('avery-manager'),
+        children: [
+          leaf('avery-a'), leaf('avery-b'), leaf('avery-c'), leaf('avery-d'),
+          leaf('avery-e'), leaf('avery-f'),
+          { ...leaf('avery-g'), children: [leaf('avery-grandchild')] },
+        ],
+      },
+      {
+        ...leaf('kai-manager'),
+        children: [
+          { ...leaf('kai-a'), children: [leaf('kai-a-child')] },
+          { ...leaf('kai-b'), children: [leaf('kai-b-child')] },
+          leaf('kai-c'),
+        ],
+      },
+      {
+        ...leaf('cameron-manager'),
+        children: [
+          leaf('cameron-a'),
+          { ...leaf('cameron-b'), children: [leaf('cameron-b-child')] },
+          { ...leaf('cameron-c'), children: [leaf('cameron-c-child')] },
+          leaf('cameron-d'),
+        ],
+      },
+    ],
+  });
+  const makeNoahPeerBandTree = (): OrgNode => ({
+    ...leaf('parker'),
+    title: 'CEO',
+    children: [
+      {
+        ...leaf('rowan'),
+        children: [
+          { ...leaf('avery'), children: [leaf('morgan-young')] },
+          leaf('morgan-johnson'),
+        ],
+      },
+      {
+        ...leaf('kai'),
+        children: [leaf('riley-thomas'), leaf('morgan-walker'), leaf('riley-lewis')],
+      },
+      { ...leaf('sam'), children: [leaf('casey'), leaf('mila')] },
+      { ...leaf('noah-jackson'), children: [leaf('rowan-harris')] },
+      leaf('noah-martinez'),
+      leaf('quinn'),
+    ],
+  });
   const positioned = (node: d3.HierarchyNode<OrgNode>): PositionedNode => node as PositionedNode;
   const overlaps = (a: LayoutRect, b: LayoutRect): boolean =>
     a.left < b.right - 0.001 && a.right > b.left + 0.001 &&
@@ -91,12 +146,12 @@ describe('AdaptiveOrgLayoutService', () => {
     const top = rect.top - LINK_CARD_PADDING;
     const bottom = rect.bottom + LINK_CARD_PADDING;
     if (Math.abs(a.y - b.y) < 0.001) {
-      return a.y >= top && a.y <= bottom &&
-        Math.max(a.x, b.x) >= left && Math.min(a.x, b.x) <= right;
+      return a.y > top + 0.001 && a.y < bottom - 0.001 &&
+        Math.max(a.x, b.x) > left + 0.001 && Math.min(a.x, b.x) < right - 0.001;
     }
     if (Math.abs(a.x - b.x) < 0.001) {
-      return a.x >= left && a.x <= right &&
-        Math.max(a.y, b.y) >= top && Math.min(a.y, b.y) <= bottom;
+      return a.x > left + 0.001 && a.x < right - 0.001 &&
+        Math.max(a.y, b.y) > top + 0.001 && Math.min(a.y, b.y) < bottom - 0.001;
     }
     return true;
   };
@@ -155,15 +210,23 @@ describe('AdaptiveOrgLayoutService', () => {
   it('reuses one hierarchy frontier across ratio changes without stale positions', () => {
     const root = d3.hierarchy(makeStar());
     const portrait = service.computeAdaptiveLayout(root, LayoutDirection.TopDown, 0.25);
+    expect(portrait.signature.startsWith('R:root')).toBe(true);
     const portraitPositions = root.descendants().map((node) => [
       node.data.id,
       positioned(node).x,
       positioned(node).y,
     ]);
+    const portraitRoutes = new Map(
+      Array.from(portrait.routes, ([key, route]) => [
+        key,
+        route.map((point) => ({ ...point })),
+      ]),
+    );
     const landscape = service.computeAdaptiveLayout(root, LayoutDirection.TopDown, 4);
     expect(landscape.signature).not.toBe(portrait.signature);
     const portraitAgain = service.computeAdaptiveLayout(root, LayoutDirection.TopDown, 0.25);
     expect(portraitAgain.signature).toBe(portrait.signature);
+    expect(portraitAgain.routes).toEqual(portraitRoutes);
     expect(root.descendants().map((node) => [
       node.data.id,
       positioned(node).x,
@@ -178,10 +241,93 @@ describe('AdaptiveOrgLayoutService', () => {
       for (const row of rootRows(result)) {
         const ordered = row.map((id) => byId.get(id)!);
         for (let index = 1; index < ordered.length; index++) {
-          expect(ordered[index]!.x - ordered[index - 1]!.x - CARD_WIDTH).toBeCloseTo(GAP_H, 8);
+          const gap = ordered[index]!.x - ordered[index - 1]!.x - CARD_WIDTH;
+          expect(gap).toBeGreaterThanOrEqual(GAP_H - 0.001);
         }
       }
     }
+  });
+
+  it('uses a portrait roster, balanced square bands, and one landscape row', () => {
+    const { root, result } = layout(makeStar(4), 1);
+    const rows = rootRows(result);
+    const byId = new Map(root.descendants().map((node) => [node.data.id, positioned(node)]));
+
+    expect(rows).toEqual([
+      ['child-1', 'child-2'],
+      ['child-3', 'child-4'],
+    ]);
+    expect(byId.get('child-1')!.y).toBe(byId.get('child-2')!.y);
+    expect(byId.get('child-3')!.y).toBe(byId.get('child-4')!.y);
+    expect(byId.get('child-3')!.y - byId.get('child-1')!.y)
+      .toBeCloseTo(CARD_HEIGHT + GAP_V, 8);
+
+    const portrait = layout(makeStar(4), 0.25);
+    const landscape = layout(makeStar(4), 4);
+    const portraitById = new Map(
+      portrait.root.descendants().map((node) => [node.data.id, positioned(node)]),
+    );
+    const portraitRows = rootRows(portrait.result);
+    expect(portraitRows).toEqual([
+      ['child-1'],
+      ['child-2'],
+      ['child-3'],
+      ['child-4'],
+    ]);
+    expect(portrait.result.signature.startsWith('R:root')).toBe(true);
+    expect(new Set(
+      portraitRows.flat().map((id) => portraitById.get(id)!.x),
+    ).size).toBe(1);
+    for (let index = 1; index < portraitRows.length; index++) {
+      expect(
+        portraitById.get(portraitRows[index]![0]!)!.y -
+          portraitById.get(portraitRows[index - 1]![0]!)!.y,
+      ).toBeCloseTo(CARD_HEIGHT + GAP_V, 8);
+    }
+
+    const firstPortraitLink = portrait.root.links().find(
+      (link) => link.target.data.id === 'child-1',
+    )!;
+    const lastPortraitLink = portrait.root.links().find(
+      (link) => link.target.data.id === 'child-4',
+    )!;
+    const firstRoute = service.buildLinkRoute(firstPortraitLink, portrait.result.routes);
+    const lastRoute = service.buildLinkRoute(lastPortraitLink, portrait.result.routes);
+    expect(firstRoute).toHaveLength(5);
+    expect(lastRoute).toHaveLength(5);
+    expect(firstRoute[2]!.x).toBe(lastRoute[2]!.x);
+    expect(firstRoute[2]!.y).toBe(lastRoute[2]!.y);
+    expect(lastRoute.at(-1)!.x).toBeCloseTo(-CARD_WIDTH / 2, 8);
+    expect(lastRoute.at(-1)!.y).toBeCloseTo(
+      portraitById.get('child-4')!.y + CARD_HEIGHT / 2,
+      8,
+    );
+    expect(portrait.result.achievedAspectRatio).toBeLessThan(0.4);
+    expect(rootRows(landscape.result)).toHaveLength(1);
+  });
+
+  it('never flattens a visible manager subtree into a portrait roster', () => {
+    const data: OrgNode = {
+      ...leaf('root'),
+      children: [
+        { ...leaf('manager'), children: [leaf('manager-report')] },
+        leaf('peer-2'),
+        leaf('peer-3'),
+        leaf('peer-4'),
+      ],
+    };
+    const { root, result } = layout(data, 0.25);
+    const byId = new Map(root.descendants().map((node) => [node.data.id, positioned(node)]));
+
+    expect(result.signature.startsWith('R:root')).toBe(false);
+    expect(result.rowsByParent.get('root')?.flat()).toEqual([
+      'manager',
+      'peer-2',
+      'peer-3',
+      'peer-4',
+    ]);
+    expect(result.rowsByParent.get('manager')).toEqual([['manager-report']]);
+    expect(byId.get('manager-report')!.y).toBeGreaterThan(byId.get('manager')!.y);
   });
 
   it('selects monotonically wider layouts and exact-ratio frames', () => {
@@ -237,6 +383,72 @@ describe('AdaptiveOrgLayoutService', () => {
     }
   });
 
+  it('fills an available earlier peer band before opening a lower band', () => {
+    const { root, result } = layout(makeNoahPeerBandTree(), 1);
+    const byId = new Map(root.descendants().map((node) => [node.data.id, positioned(node)]));
+    const rows = result.rowsByParent.get('parker')!;
+
+    expect(rows.flat()).toEqual([
+      'rowan',
+      'kai',
+      'sam',
+      'noah-jackson',
+      'noah-martinez',
+      'quinn',
+    ]);
+    expect(byId.get('noah-jackson')!.y).toBe(byId.get('kai')!.y);
+    expect(byId.get('rowan-harris')!.y - byId.get('noah-jackson')!.y)
+      .toBeCloseTo(CARD_HEIGHT + GAP_V, 8);
+  });
+
+  it('keeps connector buses from different managers visually separate', () => {
+    const { root, result } = layout(makeConnectorOwnershipTree(), 2.15);
+    const links = root.links().map((link) => ({
+      sourceId: link.source.data.id,
+      targetId: link.target.data.id,
+      route: service.buildLinkRoute(link, result.routes),
+    }));
+    const rileyRoutes = links.filter((link) => link.sourceId === 'riley-root');
+    const samRoutes = links.filter((link) => link.sourceId === 'sam-manager');
+    expect(rileyRoutes.length).toBeGreaterThan(0);
+    expect(samRoutes.length).toBeGreaterThan(0);
+
+    const intersects = (
+      aStart: LayoutPoint,
+      aEnd: LayoutPoint,
+      bStart: LayoutPoint,
+      bEnd: LayoutPoint,
+    ): boolean => {
+      const aHorizontal = aStart.y === aEnd.y;
+      const bHorizontal = bStart.y === bEnd.y;
+      const overlapsRange = (a1: number, a2: number, b1: number, b2: number) =>
+        Math.max(Math.min(a1, a2), Math.min(b1, b2)) <=
+          Math.min(Math.max(a1, a2), Math.max(b1, b2)) + 0.001;
+      if (aHorizontal && bHorizontal) {
+        return aStart.y === bStart.y && overlapsRange(aStart.x, aEnd.x, bStart.x, bEnd.x);
+      }
+      if (!aHorizontal && !bHorizontal) {
+        return aStart.x === bStart.x && overlapsRange(aStart.y, aEnd.y, bStart.y, bEnd.y);
+      }
+      return false;
+    };
+
+    for (const riley of rileyRoutes) {
+      for (const sam of samRoutes) {
+        for (let rileyIndex = 1; rileyIndex < riley.route.length; rileyIndex++) {
+          for (let samIndex = 1; samIndex < sam.route.length; samIndex++) {
+            expect(intersects(
+              riley.route[rileyIndex - 1]!,
+              riley.route[rileyIndex]!,
+              sam.route[samIndex - 1]!,
+              sam.route[samIndex]!,
+            )).toBe(false);
+          }
+        }
+      }
+    }
+  });
+
   it('is deterministic and recomputes collapsed hierarchies', () => {
     const first = layout(makeAsymmetricTree(), 0.75);
     const second = layout(makeAsymmetricTree(), 0.75);
@@ -267,7 +479,12 @@ describe('AdaptiveOrgLayoutService', () => {
       const data = trees.buildTree(await generator.generateRandomOrgStructure(size, 'stress', `adaptive-${size}`));
       expect(data).not.toBeNull();
       for (const target of [0.25, 1, 4]) {
-        const { result } = layout(data!, target);
+        let result: LayoutResult;
+        try {
+          ({ result } = layout(data!, target));
+        } catch (error) {
+          throw new Error(`Generated ${size} layout failed at ratio ${target}.`, { cause: error });
+        }
         expect(result.frameBounds.treeWidth / result.frameBounds.treeHeight).toBeCloseTo(target, 8);
       }
     }

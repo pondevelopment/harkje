@@ -7,6 +7,16 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+### Added
+
+- **ESLint**: ESLint (v9 flat config) with `angular-eslint` and
+  `typescript-eslint` is now set up. Run `npm run lint` (alias for `ng lint`)
+  to check the full project. The config extends `eslint.configs.recommended`,
+  `tseslint.configs.recommended`, `tseslint.configs.stylistic`, and the
+  Angular template + accessibility recommended sets. A few stylistic/template
+  rules are relaxed to match existing conventions (e.g. `no-explicit-any`,
+  `prefer-output-readonly`).
+
 ## 2.0.1 — 2026-07-14
 
 ### Fixed
@@ -51,8 +61,18 @@ and adheres to [Semantic Versioning](https://semver.org/).
   card and layout gaps stay fixed. Complete subtrees move rigidly, connectors
   use reserved channels, and wrapped peer bands advance by a fixed step instead
   of inheriting the deepest subtree height. Candidate frontiers are cached for
-  fast ratio changes, and export adds an exact-ratio outer frame. The former
-  one-shot compaction control is no longer needed.
+  fast ratio changes. Adaptive ratio-suitability tiers stay strict at extreme
+  targets but favor fewer, balanced early peer bands near square, eliminating
+  sparse staircases such as `1 / 2 / 1`. Route checks now consistently accept a
+  connector exactly at the required card-clearance boundary. Extreme portrait
+  layouts now align visible leaf peers in a single-column roster connected by
+  one manager-owned side bus instead of horizontally staggering singleton rows.
+  Manager-owned connector buses remain distinct across wrapped rows, and export
+  adds an exact-ratio outer frame. The former one-shot compaction control is no
+  longer needed.
+- **User-owned collapse state**: generated, JSON-edited, and CSV-imported trees
+  now start fully expanded; collapse choices apply only to the current chart and
+  are cleared when replacement data reuses node ids.
 - **Sidebar resize / collapse**: the sidebar can be dragged to resize,
   collapsed/expanded via a grip toggle, and toggled on/off with the menu button
   on mobile.

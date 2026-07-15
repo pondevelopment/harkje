@@ -40,7 +40,7 @@ export enum LayoutDirection {
  * PrimeNG-style collapsed/selection key map.
  * A key present with `true` is collapsed/selected; absent keys are expanded.
  */
-export type OrgChartNodeKeys = { [key: string]: boolean };
+export type OrgChartNodeKeys = Record<string, boolean>;
 
 /** Chart theme identifiers (applies to the org chart renderer only). */
 export type ChartThemeId =

@@ -126,6 +126,8 @@ When adding fields to nodes:
 - Collapse behavior is tracked by `collapsedKeys: OrgChartNodeKeys` (PrimeNG-style:
   key present + truthy = collapsed); clicking a node toggles collapse only if it had
   children in the original data.
+- Every replacement tree (generator/JSON/CSV) must reset `collapsedKeys` to `{}`.
+  Never auto-collapse nodes or reuse collapse choices across data identities/ids.
 - Zoom transform is preserved across collapse/theme re-renders. Data identity,
   direction, or target-aspect-ratio changes trigger auto-fit.
 - Preserve source child order row-major. Compact by translating complete subtrees
@@ -134,8 +136,16 @@ When adding fields to nodes:
   card dimensions, or layout gaps to meet a ratio.
 - Wrapped peer rows advance exactly one card-height + gap step. Never let one
   child's subtree height push later direct reports down by extra levels.
+- Group candidates into adaptive ratio-suitability tiers: strict at extreme
+  targets, broader near square. Within a tier, minimize complete peer rows,
+  singleton tails, and cumulative band delay; never use person-specific offsets.
+- At extreme portrait targets, an all-singleton visible leaf partition may use
+  one aligned card column with a manager-owned side bus. Never zigzag leaf peers.
 - Pack later rows horizontally against existing contours, reserve connector
   channels, and require every route to clear unrelated cards.
+- Route all reports of one manager from the first inter-level bus. Lower-row
+  targets descend through reserved columns; minimize shared collinear segments
+  between connectors owned by different managers.
 - Cache target-independent candidate frontiers per visible hierarchy/direction;
   rebuild only when data, collapse state, or direction changes.
 - `OrgChartComponent` exposes imperative `exportImage()` via `@ViewChild`.

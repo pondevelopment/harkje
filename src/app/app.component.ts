@@ -45,7 +45,7 @@ import { OrgChartComponent } from './components/org-chart/org-chart.component';
       <div class="sidebar" [class.sidebar--open]="isSidebarOpen()">
         <app-input-panel
           [currentData]="data()"
-          (dataChange)="data.set($event)"
+          (dataChange)="handleDataChange($event)"
         />
         <div
           class="resize-handle"
@@ -305,6 +305,15 @@ export class AppComponent implements OnInit, OnDestroy {
       this.ratioCommitTimeout = null;
     }
     this.targetAspectRatio.set(this.targetAspectRatioUi());
+  }
+
+  /** New/generated/imported organizations always start fully expanded. */
+  handleDataChange(nextData: OrgNode): void {
+    // Generator/editor ids intentionally restart at "1". Clear the previous
+    // tree's user choices before replacing data so those ids cannot collapse
+    // matching nodes in the new organization.
+    this.collapsedKeys.set({});
+    this.data.set(nextData);
   }
 
   handleDownload(): void {

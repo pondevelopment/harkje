@@ -69,7 +69,6 @@ export class OrgTreeService {
 
     let root = potentialRoots[0]!;
     if (potentialRoots.length > 1) {
-      // eslint-disable-next-line no-console
       console.warn('Multiple roots detected:', potentialRoots.map((r) => r.name));
       const leader = potentialRoots.find((r) =>
         /ceo|president|founder|director|chief/i.test(r.title || r.name),

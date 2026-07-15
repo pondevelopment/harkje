@@ -185,8 +185,20 @@ not card sizes or gaps. Source child order remains row-major, complete subtrees
 move as rigid blocks, and connectors use reserved channels. Wrapped peer rows
 advance by one fixed card/gap step; a deep subtree never pushes later peers below
 its descendants. Candidate frontiers are cached so ratio changes remain fast.
+Candidates are grouped into adaptive ratio-suitability tiers—strict for extreme
+portrait/landscape targets and broader near square. Within a tier, peer rows are
+balanced into the fewest early bands without singleton tails, preventing sparse
+staircases while retaining meaningful topology changes across target ratios.
+At extreme portrait targets, visible leaf peers can use an aligned single-column
+roster with one manager-owned side bus, rather than a misleading zigzag of cards.
+All reports of one manager share that manager's first connector bus; lower-row
+reports descend through reserved columns so unrelated manager lines never merge.
 PNG export adds a symmetric outer frame so the image matches the requested ratio
 exactly.
+
+Every newly generated, imported, or edited organization starts fully expanded.
+Nodes collapse only when the user clicks a manager in the current chart; collapse
+choices are never carried over to replacement data with reused ids.
 
 The sidebar (left) can be dragged to resize, collapsed/expanded with the grip
 toggle, and toggles on/off via the menu button on mobile.

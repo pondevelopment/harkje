@@ -3,7 +3,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
-  OnChanges,
   OnDestroy,
   ViewChild,
   effect,
@@ -25,8 +24,6 @@ import {
   CARD_WIDTH,
   LayoutResult,
 } from '../../core/adaptive-org-layout.service';
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 /**
  * Org chart renderer backed by D3, using Harkje's custom layout engine.
@@ -71,7 +68,7 @@ import {
   `,
   styleUrls: ['./org-chart.component.scss'],
 })
-export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
+export class OrgChartComponent implements AfterViewInit, OnDestroy {
   /** Nested root org node. */
   readonly value = input.required<OrgNode>();
   /** Whether nodes can be collapsed by clicking. */
@@ -134,11 +131,6 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.dimensions.set({ width: el.clientWidth, height: el.clientHeight });
     });
     this.resizeObserver.observe(this.containerRef.nativeElement);
-  }
-
-  ngOnChanges(): void {
-    // Inputs are signals; effect handles re-render. NgOnChanges kept for
-    // interface completeness but intentionally has no body work beyond effect.
   }
 
   ngOnDestroy(): void {

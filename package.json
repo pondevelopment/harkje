@@ -9,7 +9,8 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "vitest run",
-    "prebuild": "node scripts/generate-build-info.mjs"
+    "prebuild": "node scripts/generate-build-info.mjs",
+    "lint": "ng lint"
   },
   "dependencies": {
     "@angular/animations": "^19.2.0",
@@ -27,11 +28,17 @@
   },
   "devDependencies": {
     "@angular-devkit/build-angular": "^19.2.0",
+    "@angular-eslint/schematics": "^21.0.1",
     "@angular/cli": "^19.2.0",
     "@angular/compiler-cli": "^19.2.0",
     "@types/d3": "^7.4.3",
     "@types/node": "^22.14.0",
+    "@typescript-eslint/utils": "^8.64.0",
+    "angular-eslint": "^19.8.1",
+    "eslint": "^9.39.5",
+    "espree": "^9.6.1",
     "typescript": "~5.5.0",
+    "typescript-eslint": "^8.64.0",
     "vitest": "^2.1.9"
   }
 }

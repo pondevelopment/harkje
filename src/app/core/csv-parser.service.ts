@@ -159,7 +159,7 @@ export class CsvParserService {
     });
 
     // Resolve parentId.
-    const unresolvedManagers: Array<{ user: string; manager: string; row: number }> = [];
+    const unresolvedManagers: { user: string; manager: string; row: number }[] = [];
     const roots: number[] = [];
 
     nodes.forEach((n, idx) => {
