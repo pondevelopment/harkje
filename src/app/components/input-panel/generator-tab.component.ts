@@ -59,7 +59,7 @@ import { OrgTreeService } from '../../core/org-tree.service';
 
       <div class="generator-body">
         <div>
-          <span class="field-label">Organization Size</span>
+          <label class="field-label">Organization Size</label>
           <div class="size-grid">
             @for (s of sizes; track s) {
               <button
@@ -129,7 +129,8 @@ export class GeneratorTabComponent {
       if (newRoot) {
         this.dataChange.emit(newRoot);
       }
-    } catch (err) {
+    } catch (err: any) {
+      // eslint-disable-next-line no-console
       console.error(err);
     } finally {
       this.isLoading.set(false);

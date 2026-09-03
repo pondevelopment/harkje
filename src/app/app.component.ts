@@ -9,16 +9,17 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { LucideAngularModule, Menu, X, Ratio, Download } from 'lucide-angular';
+import { LucideAngularModule, Download, Loader, Menu, Ratio, X } from 'lucide-angular';
 import { LayoutDirection, OrgChartNodeKeys, OrgNode } from './models/org.types';
 import { ThemeService } from './core/theme.service';
 import { INITIAL_DATA } from './constants/initial-data';
 import { InputPanelComponent } from './components/input-panel/input-panel.component';
+import { CsvProcessingProgress } from './components/input-panel/csv-editor-tab.component';
 import { OrgChartComponent } from './components/org-chart/org-chart.component';
 
 /**
  * App shell: sidebar (InputPanel) + main chart area (OrgChart), with toolbar
- * (theme selectors, aspect ratio, download) and a draggable
+ * (theme selects, aspect ratio slider, download, compact) and a draggable
  * sidebar resize handle. State is held in signals; zoneless change detection.
  */
 @Component({
@@ -26,7 +27,11 @@ import { OrgChartComponent } from './components/org-chart/org-chart.component';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="shell" [class.shell--sidebar-open]="isSidebarOpen()">
+    <div
+      class="shell"
+      [class.shell--sidebar-open]="isSidebarOpen()"
+      [attr.aria-busy]="isComputingChart()"
+    >
       <!-- Mobile sidebar toggle -->
       <button
         type="button"
@@ -46,6 +51,9 @@ import { OrgChartComponent } from './components/org-chart/org-chart.component';
         <app-input-panel
           [currentData]="data()"
           (dataChange)="handleDataChange($event)"
+          (csvDataChange)="handleCsvDataChange($event)"
+          (csvProcessingProgress)="handleCsvProcessingProgress($event)"
+          (csvProcessingAbort)="handleCsvProcessingAbort()"
         />
         <div
           class="resize-handle"
@@ -135,6 +143,14 @@ import { OrgChartComponent } from './components/org-chart/org-chart.component';
             <span>Download image</span>
           </button>
 
+          <button
+            type="button"
+            class="tool tool--btn"
+            (click)="handleCompact()"
+            title="Run an optional compaction pass to reduce whitespace"
+          >
+            <span>Compact layout</span>
+          </button>
         </div>
 
         <div
@@ -149,10 +165,41 @@ import { OrgChartComponent } from './components/org-chart/org-chart.component';
             [chartThemeId]="themeService.chartThemeId()"
             [direction]="LayoutDirection.TopDown"
             [targetAspectRatio]="targetAspectRatio()"
+            (renderSettled)="handleChartRenderSettled($event)"
           />
         </div>
       </div>
     </div>
+
+    @if (isComputingChart()) {
+      <div class="computing-overlay">
+        <div
+          class="computing-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-live="polite"
+          aria-labelledby="computing-title"
+          aria-describedby="computing-description"
+        >
+          <lucide-icon class="computing-spinner" [img]="Loader" [size]="28" />
+          <div>
+            <h2 id="computing-title">Please wait</h2>
+            <p id="computing-description">{{ computingProgress().label }}</p>
+            <div
+              class="computing-progress"
+              role="progressbar"
+              aria-label="Chart computation progress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              [attr.aria-valuenow]="computingProgress().value"
+            >
+              <span [style.width.%]="computingProgress().value"></span>
+            </div>
+            <span class="computing-percent">{{ computingProgress().value }}%</span>
+          </div>
+        </div>
+      </div>
+    }
   `,
   imports: [LucideAngularModule, InputPanelComponent, OrgChartComponent],
   styleUrls: ['./app.component.scss'],
@@ -169,12 +216,19 @@ export class AppComponent implements OnInit, OnDestroy {
   readonly Menu = Menu;
   readonly Ratio = Ratio;
   readonly Download = Download;
+  readonly Loader = Loader;
 
   readonly LayoutDirection = LayoutDirection;
 
   readonly data = signal<OrgNode>(INITIAL_DATA);
   readonly isSidebarOpen = signal(true);
   readonly collapsedKeys = signal<OrgChartNodeKeys>({});
+  readonly isComputingChart = signal(false);
+  readonly computingProgress = signal<CsvProcessingProgress>({
+    label: 'Preparing CSV...',
+    value: 10,
+  });
+  private pendingCsvRoot: OrgNode | null = null;
 
   private readonly DEFAULT_SIDEBAR_WIDTH =
     typeof window !== 'undefined' && window.innerWidth >= 1024 ? 384 : 320;
@@ -307,16 +361,40 @@ export class AppComponent implements OnInit, OnDestroy {
     this.targetAspectRatio.set(this.targetAspectRatioUi());
   }
 
-  /** New/generated/imported organizations always start fully expanded. */
+  handleDownload(): void {
+    this.chartRef?.exportImage();
+  }
+
+  handleCompact(): void {
+    this.chartRef?.runCompaction();
+  }
+
   handleDataChange(nextData: OrgNode): void {
-    // Generator/editor ids intentionally restart at "1". Clear the previous
-    // tree's user choices before replacing data so those ids cannot collapse
-    // matching nodes in the new organization.
-    this.collapsedKeys.set({});
+    this.pendingCsvRoot = null;
+    this.isComputingChart.set(false);
     this.data.set(nextData);
   }
 
-  handleDownload(): void {
-    this.chartRef?.exportImage();
+  handleCsvProcessingProgress(progress: CsvProcessingProgress): void {
+    this.pendingCsvRoot = null;
+    this.computingProgress.set(progress);
+    this.isComputingChart.set(true);
+  }
+
+  handleCsvProcessingAbort(): void {
+    this.pendingCsvRoot = null;
+    this.isComputingChart.set(false);
+  }
+
+  handleCsvDataChange(nextData: OrgNode): void {
+    this.pendingCsvRoot = nextData;
+    this.data.set(nextData);
+  }
+
+  handleChartRenderSettled(event: { data: OrgNode; error?: unknown }): void {
+    if (event.data !== this.pendingCsvRoot) return;
+    this.pendingCsvRoot = null;
+    this.computingProgress.set({ label: 'Chart ready.', value: 100 });
+    window.setTimeout(() => this.isComputingChart.set(false), 180);
   }
 }

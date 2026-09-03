@@ -1,7 +1,17 @@
 import { Injectable } from '@angular/core';
 import * as d3 from 'd3';
-import { LayoutDirection, OrgNode } from '../models/org.types';
+import {
+  LayoutAlgorithmId,
+  LayoutBounds,
+  LayoutDirection,
+  LayoutPoint,
+  LayoutResult,
+  OrgNode,
+} from '../models/org.types';
+import { OrgLayoutAlgorithm } from './org-layout-algorithm';
 import { classifyOrthogonalSegments } from './org-layout-geometry';
+
+export type { LayoutBounds, LayoutPoint, LayoutResult } from '../models/org.types';
 
 export interface LayoutRect {
   id: string;
@@ -9,31 +19,6 @@ export interface LayoutRect {
   right: number;
   top: number;
   bottom: number;
-}
-
-export interface LayoutBounds {
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-  treeWidth: number;
-  treeHeight: number;
-}
-
-export interface LayoutPoint {
-  x: number;
-  y: number;
-}
-
-export interface LayoutResult {
-  bounds: LayoutBounds;
-  frameBounds: LayoutBounds;
-  routes: ReadonlyMap<string, readonly LayoutPoint[]>;
-  rowsByParent: ReadonlyMap<string, readonly (readonly string[])[]>;
-  targetAspectRatio: number;
-  achievedAspectRatio: number;
-  signature: string;
-  candidateCount: number;
 }
 
 export const CARD_WIDTH = 180;
@@ -51,6 +36,8 @@ const MAX_VARIANTS_PER_NODE = 32;
 const MAX_CHILD_BLOCK_COMBINATIONS = 16;
 const MAX_PARTITION_STATES = 32;
 const EXHAUSTIVE_PARTITION_CHILD_LIMIT = 8;
+const FAST_ROW_PACKING_CHILD_LIMIT = 12;
+const FAST_ROW_PACKING_RECT_LIMIT = 24;
 const RATIO_TOLERANCE = 0.08;
 const FINAL_RATIO_TOLERANCE = 0.08;
 // A better parent hierarchy may trade at most ~22% sibling breadth; beyond
@@ -125,7 +112,10 @@ interface SubtreeBlock {
  * routed subtree blocks; target ratio never scales cards, coordinates, or gaps.
  */
 @Injectable({ providedIn: 'root' })
-export class AdaptiveOrgLayoutService {
+export class AdaptiveOrgLayoutService implements OrgLayoutAlgorithm {
+  readonly id: LayoutAlgorithmId = 'adaptive';
+
+  private readonly variantValidityCache = new WeakMap<SubtreeBlock, boolean>();
   private readonly frontierCache = new WeakMap<
     HierarchyNode,
     Map<LayoutDirection, SubtreeBlock[]>
@@ -177,6 +167,14 @@ export class AdaptiveOrgLayoutService {
       signature: selected.signature,
       candidateCount: variants.length,
     };
+  }
+
+  computeLayout(
+    root: HierarchyNode,
+    direction: LayoutDirection,
+    targetAspectRatio: number = DEFAULT_TARGET_ASPECT_RATIO,
+  ): LayoutResult {
+    return this.computeAdaptiveLayout(root, direction, targetAspectRatio);
   }
 
   computeRectsAndBounds(root: HierarchyNode): {
@@ -926,6 +924,31 @@ export class AdaptiveOrgLayoutService {
     requiresThroughChannel: boolean,
     rowIndex: number,
   ): number[] | null {
+    const baseline = this.packRow(variants, requiresThroughChannel, rowIndex);
+    const placedRectCount = obstacles.length + variants.reduce(
+      (count, variant) => count + variant.rects.length,
+      0,
+    );
+    if (
+      (
+        variants.length > FAST_ROW_PACKING_CHILD_LIMIT ||
+        placedRectCount > FAST_ROW_PACKING_RECT_LIMIT
+      ) &&
+      this.isRowPlacementValid(
+        variants,
+        baseline,
+        rowTop,
+        channelDepth,
+        obstacles,
+        existingRoutes,
+        parentNode,
+        childNodes,
+        requiresThroughChannel,
+      )
+    ) {
+      return baseline;
+    }
+
     const candidates = new Map<string, number[]>();
     const add = (offsets: number[]) => {
       if (this.isRowPlacementValid(
@@ -942,7 +965,7 @@ export class AdaptiveOrgLayoutService {
         candidates.set(offsets.map((offset) => offset.toFixed(3)).join(','), offsets);
       }
     };
-    add(this.packRow(variants, requiresThroughChannel, rowIndex));
+    add(baseline);
     for (let split = 0; split <= variants.length; split++) {
       add(this.packAroundObstacles(
         variants,
@@ -1228,16 +1251,22 @@ export class AdaptiveOrgLayoutService {
   }
 
   private isVariantValid(variant: SubtreeBlock): boolean {
+    const cached = this.variantValidityCache.get(variant);
+    if (cached !== undefined) return cached;
+
     for (let first = 0; first < variant.rects.length; first++) {
       for (let second = first + 1; second < variant.rects.length; second++) {
         if (!this.rectsHaveClearance(variant.rects[first]!, variant.rects[second]!)) {
+          this.variantValidityCache.set(variant, false);
           return false;
         }
       }
     }
 
-    return this.routesClearRects(variant.routes, variant.rects) &&
+    const valid = this.routesClearRects(variant.routes, variant.rects) &&
       variant.routeOverlapCount === 0;
+    this.variantValidityCache.set(variant, valid);
+    return valid;
   }
 
   private routesClearRects(

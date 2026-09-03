@@ -71,6 +71,11 @@
   transform: scale(0.98);
 }
 
+.update-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .error-box {
   margin-top: 24px;
   padding: 16px;
@@ -79,4 +84,23 @@
   border-radius: 12px;
   color: #dc2626;
   font-size: 14px;
+}
+
+.warning-box {
+  margin-top: 24px;
+  padding: 16px;
+  background-color: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  color: #92400e;
+  font-size: 14px;
+}
+
+.warning-box ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.warning-box li + li {
+  margin-top: 6px;
 }

@@ -10,7 +10,10 @@ import { LucideAngularModule, Wand, FileJson, Sheet, Layers } from 'lucide-angul
 import { OrgNode } from '../../models/org.types';
 import { GeneratorTabComponent } from './generator-tab.component';
 import { JsonEditorTabComponent } from './json-editor-tab.component';
-import { CsvEditorTabComponent } from './csv-editor-tab.component';
+import {
+  CsvEditorTabComponent,
+  CsvProcessingProgress,
+} from './csv-editor-tab.component';
 
 type Tab = 'ai' | 'json' | 'csv';
 
@@ -74,7 +77,9 @@ type Tab = 'ai' | 'json' | 'csv';
         } @else {
           <app-csv-editor-tab
             [currentData]="currentData()"
-            (dataChange)="dataChange.emit($event)"
+            (dataChange)="csvDataChange.emit($event)"
+            (processingProgress)="csvProcessingProgress.emit($event)"
+            (processingAbort)="csvProcessingAbort.emit()"
           />
         }
       </div>
@@ -97,6 +102,9 @@ type Tab = 'ai' | 'json' | 'csv';
 })
 export class InputPanelComponent {
   @Output() dataChange = new EventEmitter<OrgNode>();
+  @Output() csvDataChange = new EventEmitter<OrgNode>();
+  @Output() csvProcessingProgress = new EventEmitter<CsvProcessingProgress>();
+  @Output() csvProcessingAbort = new EventEmitter<void>();
   readonly currentData = input<OrgNode | null>(null);
   readonly activeTab = signal<Tab>('ai');
 

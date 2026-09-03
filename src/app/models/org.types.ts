@@ -36,11 +36,42 @@ export enum LayoutDirection {
   LeftRight = 'LR',
 }
 
+/** Stable identifiers for selectable layout algorithms. */
+export type LayoutAlgorithmId = 'adaptive' | 'basic';
+
+/** Physical point used by orthogonal connector routes. */
+export interface LayoutPoint {
+  x: number;
+  y: number;
+}
+
+/** Physical content or export-frame bounds. */
+export interface LayoutBounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  treeWidth: number;
+  treeHeight: number;
+}
+
+/** Complete output returned by every layout algorithm. */
+export interface LayoutResult {
+  bounds: LayoutBounds;
+  frameBounds: LayoutBounds;
+  routes: ReadonlyMap<string, readonly LayoutPoint[]>;
+  rowsByParent: ReadonlyMap<string, readonly (readonly string[])[]>;
+  targetAspectRatio: number;
+  achievedAspectRatio: number;
+  signature: string;
+  candidateCount: number;
+}
+
 /**
  * PrimeNG-style collapsed/selection key map.
  * A key present with `true` is collapsed/selected; absent keys are expanded.
  */
-export type OrgChartNodeKeys = Record<string, boolean>;
+export type OrgChartNodeKeys = { [key: string]: boolean };
 
 /** Chart theme identifiers (applies to the org chart renderer only). */
 export type ChartThemeId =

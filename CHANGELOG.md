@@ -7,15 +7,31 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## 2.0.2 — 2026-09-03
+
 ### Added
 
-- **ESLint**: ESLint (v9 flat config) with `angular-eslint` and
-  `typescript-eslint` is now set up. Run `npm run lint` (alias for `ng lint`)
-  to check the full project. The config extends `eslint.configs.recommended`,
-  `tseslint.configs.recommended`, `tseslint.configs.stylistic`, and the
-  Angular template + accessibility recommended sets. A few stylistic/template
-  rules are relaxed to match existing conventions (e.g. `no-explicit-any`,
-  `prefer-output-readonly`).
+- **Layout strategies**: added a layout algorithm contract, registry, and basic
+  tree fallback alongside the adaptive overlap-free solver.
+- **Computation feedback**: CSV and JSON updates now show phased progress in a
+  blocking modal until the requested chart has finished rendering.
+- **Import diagnostics**: automatic CSV corrections are listed as warnings.
+
+### Changed
+
+- **Adaptive layout performance**: large generated-manager imports use validated
+  bounded row packing and cached candidate checks. The 201-node regression case
+  now completes in about five seconds instead of roughly eighteen seconds.
+- **CSV resilience**: comma and semicolon delimiters are detected automatically;
+  missing manager rows are synthesized; multiple top-level groups are connected
+  below an `Organization` root; self-manager links and multi-person manager cycles
+  are repaired deterministically with explicit warnings.
+- **Deployment**: GitHub Pages now uploads the Angular output from `dist/harkje`.
+
+### Removed
+
+- **ESLint configuration**: removed the incompatible Angular lint target and its
+  development dependencies.
 
 ## 2.0.1 — 2026-07-14
 

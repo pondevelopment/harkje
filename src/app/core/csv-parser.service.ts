@@ -5,10 +5,17 @@ import { FlatNode } from '../models/org.types';
  * CSV import/export for org structures. Mirrors the original React logic:
  * flexible header detection (`user`/`manager`/`title`/`department`/`details`
  * with aliases), manager-name → id resolution, explicit-id support, cycle
- * detection, duplicate-name detection, single-root enforcement.
+ * detection, duplicate-name detection, missing-manager synthesis, single-root
+ * enforcement.
  */
 @Injectable({ providedIn: 'root' })
 export class CsvParserService {
+  private importWarnings: string[] = [];
+
+  get warnings(): readonly string[] {
+    return this.importWarnings;
+  }
+
   csvEscape(value: string): string {
     const v = value ?? '';
     if (/[\n\r",]/.test(v)) {
@@ -41,7 +48,7 @@ export class CsvParserService {
     return lines.join('\n');
   }
 
-  parseCsvLine(line: string): string[] {
+  parseCsvLine(line: string, delimiter = ','): string[] {
     const out: string[] = [];
     let cur = '';
     let inQuotes = false;
@@ -65,7 +72,7 @@ export class CsvParserService {
         inQuotes = true;
         continue;
       }
-      if (ch === ',') {
+      if (ch === delimiter) {
         out.push(cur.trim());
         cur = '';
         continue;
@@ -83,10 +90,35 @@ export class CsvParserService {
       .split('\n')
       .map((l) => l.trim())
       .filter((l) => l.length > 0);
-    return lines.map((l) => this.parseCsvLine(l));
+    const delimiter = this.detectDelimiter(lines[0] ?? '');
+    return lines.map((l) => this.parseCsvLine(l, delimiter));
+  }
+
+  private detectDelimiter(line: string): ',' | ';' {
+    let commaCount = 0;
+    let semicolonCount = 0;
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]!;
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (!inQuotes && ch === ',') {
+        commaCount++;
+      } else if (!inQuotes && ch === ';') {
+        semicolonCount++;
+      }
+    }
+
+    return semicolonCount > commaCount ? ';' : ',';
   }
 
   buildFlatNodesFromCsv(csvText: string): FlatNode[] {
+    this.importWarnings = [];
     const rows = this.parseCsvText(csvText);
     if (rows.length === 0) throw new Error('CSV is empty.');
 
@@ -159,8 +191,17 @@ export class CsvParserService {
     });
 
     // Resolve parentId.
-    const unresolvedManagers: { user: string; manager: string; row: number }[] = [];
-    const roots: number[] = [];
+    const usedIds = new Set(nodes.map((node) => node.id));
+    const nextGeneratedId = (prefix: string): string => {
+      let suffix = 1;
+      let id = `${prefix}-${suffix}`;
+      while (usedIds.has(id)) {
+        suffix++;
+        id = `${prefix}-${suffix}`;
+      }
+      usedIds.add(id);
+      return id;
+    };
 
     nodes.forEach((n, idx) => {
       const row = temp[idx]!.row;
@@ -170,34 +211,62 @@ export class CsvParserService {
 
       if (explicitParentId) {
         const pid = String(explicitParentId);
-        n.parentId = pid.toLowerCase() === 'null' ? 'null' : pid;
+        if (pid === n.id) {
+          n.parentId = 'null';
+          this.importWarnings.push(
+            `Row ${idx + 1}: "${n.name}" listed itself as manager; manager was cleared.`,
+          );
+        } else {
+          n.parentId = pid.toLowerCase() === 'null' ? 'null' : pid;
+        }
       } else {
         const managerName = col(row, ['manager', 'parent', 'reportsTo', 'reportsto'], 1).trim();
         if (!managerName || managerName.toLowerCase() === 'null') {
           n.parentId = 'null';
+        } else if (normalizeKey(managerName) === normalizeKey(n.name)) {
+          n.parentId = 'null';
+          this.importWarnings.push(
+            `Row ${idx + 1}: "${n.name}" listed itself as manager; manager was cleared.`,
+          );
         } else {
-          const pid = nameToId.get(normalizeKey(managerName));
+          const managerKey = normalizeKey(managerName);
+          let pid = nameToId.get(managerKey);
           if (!pid) {
-            unresolvedManagers.push({ user: n.name, manager: managerName, row: idx + 1 });
-            n.parentId = 'null';
-          } else {
-            n.parentId = pid;
+            pid = nextGeneratedId('generated-manager');
+            nameToId.set(managerKey, pid);
+            nodes.push({
+              id: pid,
+              parentId: 'null',
+              name: managerName,
+              title: 'Manager',
+              department: '',
+              details: 'Added automatically from a CSV manager reference.',
+            });
+            this.importWarnings.push(
+              `Row ${idx + 1}: manager "${managerName}" had no user row; a user was added automatically.`,
+            );
           }
+          n.parentId = pid;
         }
       }
-      if (n.parentId === 'null') roots.push(idx);
     });
 
-    if (unresolvedManagers.length > 0) {
-      const sample = unresolvedManagers
-        .slice(0, 5)
-        .map((m) => `Row ${m.row}: "${m.user}" -> manager "${m.manager}" not found`)
-        .join('\n');
-      throw new Error(
-        `Some manager names could not be resolved. Make sure managers exist as users in the CSV.\n${sample}${
-          unresolvedManagers.length > 5 ? `\n(and ${unresolvedManagers.length - 5} more)` : ''
-        }`,
+    let roots = nodes.filter((node) => node.parentId === 'null');
+    if (roots.length > 1) {
+      const organizationRootId = nextGeneratedId('generated-root');
+      for (const root of roots) root.parentId = organizationRootId;
+      nodes.push({
+        id: organizationRootId,
+        parentId: 'null',
+        name: 'Organization',
+        title: 'Organization',
+        department: '',
+        details: 'Added automatically to connect CSV root groups.',
+      });
+      this.importWarnings.push(
+        `Added an "Organization" root to connect ${roots.length} separate top-level groups.`,
       );
+      roots = [nodes[nodes.length - 1]!];
     }
 
     if (roots.length !== 1) {
@@ -206,29 +275,45 @@ export class CsvParserService {
       );
     }
 
-    // Cycle detection (by id -> parentId)
+    // Repair disconnected manager cycles by reconnecting the earliest CSV row
+    // in each cycle to the established root.
     const parentById = new Map<string, string | null>();
     nodes.forEach((n) =>
       parentById.set(String(n.id), n.parentId === 'null' ? null : String(n.parentId)),
     );
+    const rootId = roots[0]!.id;
+    const processed = new Set<string>();
+    const nodeIndexById = new Map(nodes.map((node, index) => [node.id, index]));
 
-    const visited = new Set<string>();
-    const inStack = new Set<string>();
-    const dfs = (id: string): boolean => {
-      if (inStack.has(id)) return true;
-      if (visited.has(id)) return false;
-      visited.add(id);
-      inStack.add(id);
-      const pid = parentById.get(id);
-      if (pid) {
-        if (dfs(pid)) return true;
+    for (const startId of parentById.keys()) {
+      if (processed.has(startId)) continue;
+      const path: string[] = [];
+      const pathIndex = new Map<string, number>();
+      let currentId: string | null = startId;
+
+      while (currentId && parentById.has(currentId) && !processed.has(currentId)) {
+        const cycleStart = pathIndex.get(currentId);
+        if (cycleStart !== undefined) {
+          const cycleIds = path.slice(cycleStart);
+          const repairedId = [...cycleIds].sort((a, b) =>
+            (nodeIndexById.get(a) ?? Infinity) - (nodeIndexById.get(b) ?? Infinity),
+          )[0]!;
+          const repairedNode = nodes[nodeIndexById.get(repairedId)!]!;
+          const formerManagerId = parentById.get(repairedId)!;
+          const formerManager = nodes[nodeIndexById.get(formerManagerId!)!]!;
+          repairedNode.parentId = rootId;
+          parentById.set(repairedId, rootId);
+          this.importWarnings.push(
+            `Manager cycle detected (${cycleIds.map((id) => nodes[nodeIndexById.get(id)!]!.name).join(' -> ')}); ` +
+            `"${repairedNode.name}" was reassigned from "${formerManager.name}" to "${roots[0]!.name}".`,
+          );
+          break;
+        }
+        pathIndex.set(currentId, path.length);
+        path.push(currentId);
+        currentId = parentById.get(currentId) ?? null;
       }
-      inStack.delete(id);
-      return false;
-    };
-
-    for (const id of parentById.keys()) {
-      if (dfs(id)) throw new Error('Cycle detected in CSV manager relationships.');
+      for (const id of path) processed.add(id);
     }
 
     nodes.forEach((n) => {

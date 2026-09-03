@@ -95,6 +95,19 @@ describe('CsvParserService', () => {
       expect(nodes[1]!.parentId).toBe(nodes[0]!.id);
     });
 
+    it('imports semicolon-delimited CSV', () => {
+      const csv =
+        'user;manager;title;department\n' +
+        'Jane Doe;;CEO;Executive\n' +
+        'John Smith;Jane Doe;Engineering Manager;Engineering';
+      const nodes = service.buildFlatNodesFromCsv(csv);
+
+      expect(nodes).toHaveLength(2);
+      expect(nodes[0]!.parentId).toBe('null');
+      expect(nodes[1]!.parentId).toBe(nodes[0]!.id);
+      expect(nodes[1]!.department).toBe('Engineering');
+    });
+
     it('accepts alternative header names (name/role/dept)', () => {
       const csv = 'name,manager,role,dept,details\nAlice,,VP,Eng,X';
       const nodes = service.buildFlatNodesFromCsv(csv);
@@ -113,14 +126,78 @@ describe('CsvParserService', () => {
       expect(nodes[1]!.parentId).toBe('1');
     });
 
-    it('throws on multiple roots', () => {
+    it('adds an organization root and warning for multiple explicit roots', () => {
       const csv = 'user,manager,title,department,details\nA,,X,Y,\nB,,X,Y,';
-      expect(() => service.buildFlatNodesFromCsv(csv)).toThrow(/root/i);
+      const nodes = service.buildFlatNodesFromCsv(csv);
+      const root = nodes.find((node) => node.parentId === 'null')!;
+
+      expect(root.name).toBe('Organization');
+      expect(nodes.filter((node) => node.parentId === root.id)).toHaveLength(2);
+      expect(service.warnings).toContain(
+        'Added an "Organization" root to connect 2 separate top-level groups.',
+      );
     });
 
-    it('throws on unresolved manager name', () => {
+    it('creates a user for an unresolved manager name', () => {
       const csv = 'user,manager,title,department,details\nAlice,Ghost,VP,Eng,';
-      expect(() => service.buildFlatNodesFromCsv(csv)).toThrow();
+      const nodes = service.buildFlatNodesFromCsv(csv);
+      const alice = nodes.find((node) => node.name === 'Alice')!;
+      const manager = nodes.find((node) => node.name === 'Ghost')!;
+
+      expect(manager.title).toBe('Manager');
+      expect(manager.parentId).toBe('null');
+      expect(alice.parentId).toBe(manager.id);
+      expect(service.warnings).toEqual([
+        'Row 1: manager "Ghost" had no user row; a user was added automatically.',
+      ]);
+    });
+
+    it('reuses a generated user referenced by multiple reports', () => {
+      const csv =
+        'user,manager,title,department\n' +
+        'Alice,Ghost,VP,Eng\n' +
+        'Bob,Ghost,Developer,Eng';
+      const nodes = service.buildFlatNodesFromCsv(csv);
+      const managers = nodes.filter((node) => node.name === 'Ghost');
+
+      expect(managers).toHaveLength(1);
+      expect(nodes.filter((node) => node.parentId === managers[0]!.id)).toHaveLength(2);
+    });
+
+    it('adds one organization root for multiple generated manager groups', () => {
+      const csv =
+        'user,manager,title,department\n' +
+        'Alice,Manager One,VP,Eng\n' +
+        'Bob,Manager Two,VP,Sales';
+      const nodes = service.buildFlatNodesFromCsv(csv);
+      const root = nodes.find((node) => node.parentId === 'null')!;
+
+      expect(root.name).toBe('Organization');
+      expect(nodes.filter((node) => node.parentId === root.id)).toHaveLength(2);
+      expect(service.warnings).toContain(
+        'Added an "Organization" root to connect 2 separate top-level groups.',
+      );
+    });
+
+    it('clears a self-manager relationship and reports a warning', () => {
+      const csv =
+        'user;manager;title;department\n' +
+        'Anouk Hiensch;Anouk Hiensch;Managing Director;Bike Mobility Services B.V.';
+      const nodes = service.buildFlatNodesFromCsv(csv);
+
+      expect(nodes).toHaveLength(1);
+      expect(nodes[0]!.parentId).toBe('null');
+      expect(service.warnings).toEqual([
+        'Row 1: "Anouk Hiensch" listed itself as manager; manager was cleared.',
+      ]);
+    });
+
+    it('clears an explicit self parent id and reports a warning', () => {
+      const csv = 'user,id,parentId\nAlice,person-1,person-1';
+      const nodes = service.buildFlatNodesFromCsv(csv);
+
+      expect(nodes[0]!.parentId).toBe('null');
+      expect(service.warnings[0]).toContain('manager was cleared');
     });
 
     it('throws on duplicate names', () => {
@@ -128,7 +205,7 @@ describe('CsvParserService', () => {
       expect(() => service.buildFlatNodesFromCsv(csv)).toThrow(/duplicate/i);
     });
 
-    it('throws on a cycle', () => {
+    it('repairs a multi-person cycle by reconnecting its earliest row to the root', () => {
       // One root (Root, id 1) plus a 2-node cycle B↔C. Each row uses the
       // explicit `parentId` column so the `manager` column is ignored, which
       // means unresolved-manager validation passes and we reach the cycle DFS.
@@ -138,7 +215,16 @@ describe('CsvParserService', () => {
         'A,Root,R,Y,,2,1\n' +
         'B,A,R,Y,,3,4\n' +   // B's parent is C (id 4)
         'C,B,R,Y,,4,3\n';   // C's parent is B (id 3)
-      expect(() => service.buildFlatNodesFromCsv(cyclic)).toThrow(/cycle/i);
+      const nodes = service.buildFlatNodesFromCsv(cyclic);
+      const root = nodes.find((node) => node.name === 'Root')!;
+      const b = nodes.find((node) => node.name === 'B')!;
+      const c = nodes.find((node) => node.name === 'C')!;
+
+      expect(b.parentId).toBe(root.id);
+      expect(c.parentId).toBe(b.id);
+      expect(service.warnings).toContain(
+        'Manager cycle detected (B -> C); "B" was reassigned from "C" to "Root".',
+      );
     });
 
     it('defaults title/department/details to empty strings when columns absent', () => {
@@ -179,6 +265,16 @@ describe('CsvParserService', () => {
     it('preserves content of otherwise-blank cells', () => {
       const lines = service.parseCsvText('a,b\nc,');
       expect(lines).toEqual([['a', 'b'], ['c', '']]);
+    });
+
+    it('ignores semicolons inside quoted fields when detecting the delimiter', () => {
+      const lines = service.parseCsvText(
+        'user;manager;details\nJane;;"Leads sales; marketing"',
+      );
+      expect(lines).toEqual([
+        ['user', 'manager', 'details'],
+        ['Jane', '', 'Leads sales; marketing'],
+      ]);
     });
   });
 });

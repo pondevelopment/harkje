@@ -21,7 +21,7 @@ import { OrgTreeService } from '../../core/org-tree.service';
   template: `
     @let err = error();
     <div class="editor">
-      <span class="editor-label">Structure Data (Flat Array)</span>
+      <label class="editor-label">Structure Data (Flat Array)</label>
       <p class="editor-hint">
         Edit the array below. Use <code>"parentId": "null"</code> for the root node.
       </p>
@@ -79,8 +79,8 @@ export class JsonEditorTabComponent {
           'Could not build tree. Ensure exactly one node has parentId: null (the CEO/Root).',
         );
       }
-    } catch (e) {
-      this.error.set(e instanceof Error ? `Invalid JSON format: ${e.message}` : 'Invalid JSON format.');
+    } catch (e: any) {
+      this.error.set('Invalid JSON format: ' + e.message);
     }
   }
 }

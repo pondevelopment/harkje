@@ -3,18 +3,22 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  OnChanges,
   OnDestroy,
   ViewChild,
   effect,
   input,
   model,
+  output,
   signal,
   untracked,
 } from '@angular/core';
 import * as d3 from 'd3';
+import { toPng } from 'html-to-image';
 import {
   ChartThemeId,
   LayoutDirection,
+  LayoutResult,
   OrgChartNodeKeys,
   OrgNode,
 } from '../../models/org.types';
@@ -22,8 +26,9 @@ import {
   AdaptiveOrgLayoutService,
   CARD_HEIGHT,
   CARD_WIDTH,
-  LayoutResult,
 } from '../../core/adaptive-org-layout.service';
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 /**
  * Org chart renderer backed by D3, using Harkje's custom layout engine.
@@ -33,7 +38,7 @@ import {
  *   - `[collapsible]`  whether clicking a parent toggles collapse (default true)
  *   - `[(collapsedKeys)]` two-way collapsed-state map { id: true }
  *   - `[chartThemeId]` chart theme to apply on the container
- *   - `[targetAspectRatio]` selects a fixed-gap row topology
+ *   - `[targetAspectRatio]` drives the row/grid/wrap layout decision
  *   - `[direction]`    layout direction (TopDown/LeftRight)
  *
  * Imperative methods (call via `@ViewChild`): `exportImage()`, `runCompaction()`.
@@ -62,13 +67,13 @@ import {
       </div>
       <div data-export-exclude="true" class="org-chart-pill org-chart-pill--right">
         <span class="org-chart-dot"></span>
-        Recursive Layout Engine v5
+        Overlap-Free Engine v3 (Compact)
       </div>
     </div>
   `,
   styleUrls: ['./org-chart.component.scss'],
 })
-export class OrgChartComponent implements AfterViewInit, OnDestroy {
+export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   /** Nested root org node. */
   readonly value = input.required<OrgNode>();
   /** Whether nodes can be collapsed by clicking. */
@@ -81,6 +86,8 @@ export class OrgChartComponent implements AfterViewInit, OnDestroy {
   readonly direction = input<LayoutDirection>(LayoutDirection.TopDown);
   /** Target aspect ratio for the layout decision. */
   readonly targetAspectRatio = input<number>(1);
+  /** Reports completion of a render attempt for the exact input data object. */
+  readonly renderSettled = output<{ data: OrgNode; error?: unknown }>();
 
   @ViewChild('container', { static: true })
   containerRef!: ElementRef<HTMLDivElement>;
@@ -106,22 +113,29 @@ export class OrgChartComponent implements AfterViewInit, OnDestroy {
   private linksSel?: d3.Selection<SVGPathElement, any, SVGGElement, unknown>;
   private transform = d3.zoomIdentity;
   private prevData?: OrgNode;
-  private prevLayoutKey?: string;
-  private hierarchyData?: OrgNode;
-  private hierarchyCollapsedKey?: string;
 
   constructor(private readonly layout: AdaptiveOrgLayoutService) {
     // Re-render whenever any layout-affecting input changes.
     effect(() => {
       // Read the signals so the effect tracks them.
-      this.value();
+      const data = this.value();
       this.collapsible();
       this.collapsedKeys();
       this.chartThemeId();
       this.direction();
       this.targetAspectRatio();
       this.dimensions();
-      untracked(() => this.render());
+      untracked(() => {
+        let error: unknown;
+        try {
+          this.render(data);
+        } catch (renderError) {
+          error = renderError;
+          console.error('Failed to render organization chart', renderError);
+        } finally {
+          this.renderSettled.emit(error ? { data, error } : { data });
+        }
+      });
     });
   }
 
@@ -133,11 +147,16 @@ export class OrgChartComponent implements AfterViewInit, OnDestroy {
     this.resizeObserver.observe(this.containerRef.nativeElement);
   }
 
+  ngOnChanges(): void {
+    // Inputs are signals; effect handles re-render. NgOnChanges kept for
+    // interface completeness but intentionally has no body work beyond effect.
+  }
+
   ngOnDestroy(): void {
     this.resizeObserver?.disconnect();
   }
 
-  /** Export a PNG of the exact target-ratio frame (SVG → canvas). */
+  /** Export a PNG of the tight chart bounds (warmup + restore DOM). */
   async exportImage(): Promise<void> {
     if (!this.containerRef?.nativeElement || !this.svgRef?.nativeElement) return;
     if (!this.layoutBounds) {
@@ -151,47 +170,62 @@ export class OrgChartComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const exportBounds = this.layoutResult?.frameBounds ?? this.layoutBounds;
-    const { minX, minY, treeWidth, treeHeight } = exportBounds;
-    const exportWidth = Math.max(1, Math.ceil(treeWidth));
-    const exportHeight = Math.max(1, Math.ceil(treeHeight));
+    const padding = 40;
+    const { minX, minY, treeWidth, treeHeight } = this.layoutBounds;
+    const exportWidth = Math.max(1, Math.ceil(treeWidth + padding * 2));
+    const exportHeight = Math.max(1, Math.ceil(treeHeight + padding * 2));
+
+    const containerEl = this.containerRef.nativeElement;
+    const prevContainerWidth = containerEl.style.width;
+    const prevContainerHeight = containerEl.style.height;
+    const prevContainerOverflow = containerEl.style.overflow;
+    const prevContainerBg = containerEl.style.background;
+    const prevContainerBgColor = containerEl.style.backgroundColor;
+    const prevSvgWidth = svgEl.getAttribute('width');
+    const prevSvgHeight = svgEl.getAttribute('height');
+    const prevGTransform = gEl.getAttribute('transform');
+
+    const excludedEls = Array.from(
+      containerEl.querySelectorAll('[data-export-exclude="true"]'),
+    ) as HTMLElement[];
+    const prevExcludedDisplay = excludedEls.map((el) => el.style.display);
 
     try {
-      const clonedSvg = svgEl.cloneNode(true) as SVGSVGElement;
-      clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-      clonedSvg.setAttribute('width', String(exportWidth));
-      clonedSvg.setAttribute('height', String(exportHeight));
-      clonedSvg.setAttribute('viewBox', `0 0 ${exportWidth} ${exportHeight}`);
-      clonedSvg.querySelector('g')?.setAttribute(
-        'transform',
-        `translate(${-minX},${-minY})`,
-      );
+      excludedEls.forEach((el) => (el.style.display = 'none'));
+      containerEl.style.width = `${exportWidth}px`;
+      containerEl.style.height = `${exportHeight}px`;
+      containerEl.style.overflow = 'hidden';
+      containerEl.style.backgroundColor = 'transparent';
+      svgEl.setAttribute('width', String(exportWidth));
+      svgEl.setAttribute('height', String(exportHeight));
+      gEl.setAttribute('transform', `translate(${padding - minX},${padding - minY})`);
 
-      const computed = window.getComputedStyle(this.containerRef.nativeElement);
-      this.replaceExportCards(clonedSvg, svgEl, computed);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-      const markup = new XMLSerializer().serializeToString(clonedSvg);
-      const blob = new Blob([markup], { type: 'image/svg+xml;charset=utf-8' });
-      const objectUrl = URL.createObjectURL(blob);
-      const image = new Image();
+      // Warmup run
       try {
-        await new Promise<void>((resolve, reject) => {
-          image.onload = () => resolve();
-          image.onerror = () => reject(new Error('Failed to rasterize chart SVG.'));
-          image.src = objectUrl;
+        await toPng(containerEl, {
+          quality: 0.1,
+          skipFonts: true,
+          pixelRatio: 1,
+          width: exportWidth,
+          height: exportHeight,
+          backgroundColor: 'transparent',
         });
-      } finally {
-        URL.revokeObjectURL(objectUrl);
+      } catch {
+        // Ignore warmup errors.
       }
 
-      const canvas = document.createElement('canvas');
-      canvas.width = exportWidth;
-      canvas.height = exportHeight;
-      const context = canvas.getContext('2d');
-      if (!context) throw new Error('Canvas export is unavailable.');
-      context.clearRect(0, 0, exportWidth, exportHeight);
-      context.drawImage(image, 0, 0, exportWidth, exportHeight);
-      const dataUrl = canvas.toDataURL('image/png');
+      const dataUrl = await toPng(containerEl, {
+        quality: 1.0,
+        pixelRatio: 1,
+        cacheBust: true,
+        backgroundColor: 'transparent',
+        skipFonts: true,
+        width: exportWidth,
+        height: exportHeight,
+      });
 
       const link = document.createElement('a');
       link.download = `org-chart-${new Date().toISOString().slice(0, 10)}.png`;
@@ -200,163 +234,25 @@ export class OrgChartComponent implements AfterViewInit, OnDestroy {
     } catch (err) {
       console.error('Failed to export image', err);
       alert('Failed to export image. Please try using a modern desktop browser (Chrome/Edge/Firefox).');
+    } finally {
+      excludedEls.forEach((el, i) => (el.style.display = prevExcludedDisplay[i] ?? ''));
+      containerEl.style.width = prevContainerWidth;
+      containerEl.style.height = prevContainerHeight;
+      containerEl.style.overflow = prevContainerOverflow;
+      containerEl.style.background = prevContainerBg;
+      containerEl.style.backgroundColor = prevContainerBgColor;
+      if (prevSvgWidth === null) svgEl.removeAttribute('width');
+      else svgEl.setAttribute('width', prevSvgWidth);
+      if (prevSvgHeight === null) svgEl.removeAttribute('height');
+      else svgEl.setAttribute('height', prevSvgHeight);
+      if (prevGTransform === null) gEl.removeAttribute('transform');
+      else gEl.setAttribute('transform', prevGTransform);
     }
   }
 
-  /**
-   * Canvas security rules taint images containing SVG `<foreignObject>` HTML.
-   * Replace detached export cards with native SVG elements while retaining the
-   * selected chart theme and core person information.
-   */
-  private replaceExportCards(
-    clonedSvg: SVGSVGElement,
-    sourceSvg: SVGSVGElement,
-    computed: CSSStyleDeclaration,
-  ): void {
-    const namespace = 'http://www.w3.org/2000/svg';
-    const sourceNodes = Array.from(sourceSvg.querySelectorAll<SVGGElement>('g.node'));
-    const clonedNodes = Array.from(clonedSvg.querySelectorAll<SVGGElement>('g.node'));
-    const cardBg = this.exportColor(computed, '--card-bg', '#ffffff');
-    const cardBorder = this.exportColor(computed, '--card-border', '#e2e8f0');
-    const managerBorder = this.exportColor(
-      computed,
-      '--card-border-manager',
-      cardBorder,
-    );
-    const nameColor = this.exportColor(computed, '--card-name', '#0f172a');
-    const titleColor = this.exportColor(computed, '--card-title', '#4f46e5');
-    const departmentColor = this.exportColor(computed, '--card-dept', '#64748b');
-
-    clonedNodes.forEach((clonedNode, index) => {
-      const sourceNode = sourceNodes[index] as
-        | (SVGGElement & { __data__?: d3.HierarchyNode<OrgNode> })
-        | undefined;
-      const datum = sourceNode?.__data__;
-      if (!datum) return;
-      clonedNode.querySelector('foreignObject')?.remove();
-
-      const data = datum.data;
-      const hasChildren = !!(data.children && data.children.length > 0);
-      const rect = document.createElementNS(namespace, 'rect');
-      rect.setAttribute('x', String(-CARD_WIDTH / 2));
-      rect.setAttribute('y', '0');
-      rect.setAttribute('width', String(CARD_WIDTH));
-      rect.setAttribute('height', String(CARD_HEIGHT));
-      rect.setAttribute('rx', '6');
-      rect.setAttribute('fill', cardBg);
-      rect.setAttribute('stroke', hasChildren ? managerBorder : cardBorder);
-      rect.setAttribute('stroke-width', '1');
-      clonedNode.appendChild(rect);
-
-      const divider = document.createElementNS(namespace, 'line');
-      divider.setAttribute('x1', '-78');
-      divider.setAttribute('x2', '78');
-      divider.setAttribute('y1', '48');
-      divider.setAttribute('y2', '48');
-      divider.setAttribute('stroke', cardBorder);
-      divider.setAttribute('stroke-width', '0.75');
-      clonedNode.appendChild(divider);
-
-      clonedNode.appendChild(
-        this.exportText(
-          namespace,
-          this.truncateExportText(data.name, 22),
-          -78,
-          18,
-          nameColor,
-          '12px',
-          '700',
-        ),
-      );
-      clonedNode.appendChild(
-        this.exportText(
-          namespace,
-          this.truncateExportText(data.title, 28),
-          -78,
-          34,
-          titleColor,
-          '10px',
-          '600',
-        ),
-      );
-      clonedNode.appendChild(
-        this.exportText(
-          namespace,
-          this.truncateExportText((data.department || 'General').toUpperCase(), 27),
-          -78,
-          64,
-          departmentColor,
-          '9px',
-          '500',
-        ),
-      );
-
-      if (hasChildren) {
-        const count = data.children!.length;
-        const badge = document.createElementNS(namespace, 'circle');
-        badge.setAttribute('cx', '76');
-        badge.setAttribute('cy', '14');
-        badge.setAttribute('r', '8');
-        badge.setAttribute('fill', 'none');
-        badge.setAttribute('stroke', titleColor);
-        badge.setAttribute('stroke-width', '1');
-        clonedNode.appendChild(badge);
-        const countText = this.exportText(
-          namespace,
-          String(count),
-          76,
-          17,
-          titleColor,
-          '8px',
-          '700',
-        );
-        countText.setAttribute('text-anchor', 'middle');
-        clonedNode.appendChild(countText);
-      }
-    });
-  }
-
-  private exportText(
-    namespace: string,
-    value: string,
-    x: number,
-    y: number,
-    fill: string,
-    fontSize: string,
-    fontWeight: string,
-  ): SVGTextElement {
-    const text = document.createElementNS(namespace, 'text') as SVGTextElement;
-    text.setAttribute('x', String(x));
-    text.setAttribute('y', String(y));
-    text.setAttribute('fill', fill);
-    text.setAttribute('font-family', 'Arial, sans-serif');
-    text.setAttribute('font-size', fontSize);
-    text.setAttribute('font-weight', fontWeight);
-    text.textContent = value;
-    return text;
-  }
-
-  private exportColor(
-    computed: CSSStyleDeclaration,
-    property: string,
-    fallback: string,
-  ): string {
-    return computed.getPropertyValue(property).trim() || fallback;
-  }
-
-  private truncateExportText(value: string, maxLength: number): string {
-    return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`;
-  }
-
-  /** Compatibility alias: recompute the current optimal adaptive layout. */
+  /** Run an optional compaction pass to reduce whitespace (animated). */
   runCompaction(): void {
-    if (!this.root) return;
-    this.layoutResult = this.layout.computeAdaptiveLayout(
-      this.root,
-      this.direction(),
-      this.targetAspectRatio(),
-    );
-    this.updateDrawing();
+    this.render();
   }
 
   private collapsedSet(): Set<string> {
@@ -368,64 +264,38 @@ export class OrgChartComponent implements AfterViewInit, OnDestroy {
     return set;
   }
 
-  private updateDrawing(): void {
-    const root = this.root;
-    const nodesSel = this.nodesSel;
-    const linksSel = this.linksSel;
-    const result = this.layoutResult;
-    if (!root || !nodesSel || !linksSel || !result) return;
-    linksSel.attr('d', (d: any) =>
-      this.layout.buildLinkPath(d, result.routes),
-    );
-    nodesSel.attr('transform', (d: any) => `translate(${d.x},${d.y})`);
-    this.layoutBounds = {
-      minX: result.bounds.minX,
-      minY: result.bounds.minY,
-      treeWidth: result.bounds.treeWidth,
-      treeHeight: result.bounds.treeHeight,
-    };
-  }
-
-  private render(): void {
+  private render(data: OrgNode = this.value()): void {
     if (!this.svgRef?.nativeElement) return;
     const containerEl = this.containerRef?.nativeElement;
     const computed = containerEl ? window.getComputedStyle(containerEl) : null;
     const chartLinkStroke = (computed?.getPropertyValue('--chart-link') || '').trim() || '#cbd5e1';
 
-    const data = this.value();
     const svg = d3.select(this.svgRef.nativeElement);
     svg.selectAll('*').remove();
 
     const { width, height } = this.dimensions();
-    const layoutKey = `${this.direction()}|${this.targetAspectRatio()}`;
+    const root = d3.hierarchy<OrgNode>(data);
 
+    // Apply collapse state
     const collapsed = this.collapsedSet();
-    const collapsedKey = Array.from(collapsed).sort().join('\u0000');
-    let root = this.root;
-    if (
-      !root ||
-      this.hierarchyData !== data ||
-      this.hierarchyCollapsedKey !== collapsedKey
-    ) {
-      root = d3.hierarchy<OrgNode>(data);
-      root.descendants().forEach((d) => {
-        if (collapsed.has(d.data.id)) d.children = undefined;
-      });
-      this.hierarchyData = data;
-      this.hierarchyCollapsedKey = collapsedKey;
-    }
+    root.descendants().forEach((d) => {
+      if (collapsed.has(d.data.id)) {
+        d.children = undefined;
+      }
+    });
 
-    const result = this.layout.computeAdaptiveLayout(
+    const layoutResult = this.layout.computeLayout(
       root,
       this.direction(),
       this.targetAspectRatio(),
     );
-    this.layoutResult = result;
+    this.layoutResult = layoutResult;
+    const { bounds } = layoutResult;
     this.layoutBounds = {
-      minX: result.bounds.minX,
-      minY: result.bounds.minY,
-      treeWidth: result.bounds.treeWidth,
-      treeHeight: result.bounds.treeHeight,
+      minX: bounds.minX,
+      minY: bounds.minY,
+      treeWidth: bounds.treeWidth,
+      treeHeight: bounds.treeHeight,
     };
 
     const g = svg.append('g');
@@ -442,29 +312,19 @@ export class OrgChartComponent implements AfterViewInit, OnDestroy {
     svg.call(zoom);
 
     // Determine zoom strategy
-    if (this.prevData !== data || this.prevLayoutKey !== layoutKey) {
+    if (this.prevData !== data) {
       const padding = 80;
       const availableW = width - padding * 2;
       const availableH = height - padding * 2;
-      const scale = Math.max(
-        0.1,
-        Math.min(
-          1.2,
-          Math.min(
-            availableW / result.bounds.treeWidth,
-            availableH / result.bounds.treeHeight,
-          ),
-        ),
-      );
-      const layoutCenterX = result.bounds.minX + result.bounds.treeWidth / 2;
-      const layoutCenterY = result.bounds.minY + result.bounds.treeHeight / 2;
+      const scale = Math.min(1.2, Math.min(availableW / bounds.treeWidth, availableH / bounds.treeHeight));
+      const layoutCenterX = bounds.minX + bounds.treeWidth / 2;
+      const layoutCenterY = bounds.minY + bounds.treeHeight / 2;
       const transformX = width / 2 - layoutCenterX * scale;
       const transformY = height / 2 - layoutCenterY * scale;
       const newTransform = d3.zoomIdentity.translate(transformX, transformY).scale(scale);
       svg.call(zoom.transform, newTransform);
       this.transform = newTransform;
       this.prevData = data;
-      this.prevLayoutKey = layoutKey;
     } else {
       svg.call(zoom.transform, this.transform);
     }
@@ -476,14 +336,10 @@ export class OrgChartComponent implements AfterViewInit, OnDestroy {
       .enter()
       .append('path')
       .attr('class', 'link')
-      .attr('data-source-id', (d: any) => String(d.source.data.id))
-      .attr('data-target-id', (d: any) => String(d.target.data.id))
       .attr('fill', 'none')
       .attr('stroke', chartLinkStroke)
       .attr('stroke-width', 1.5)
-      .attr('d', (d: any) =>
-        this.layout.buildLinkPath(d, result.routes),
-      );
+      .attr('d', (d: any) => this.layout.buildLinkPath(d, layoutResult.routes));
     this.linksSel = linksSel as any;
 
     // Draw nodes

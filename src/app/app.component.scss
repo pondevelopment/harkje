@@ -214,6 +214,98 @@
   opacity: 0.9;
 }
 
+/* ---------- Chart computation ---------- */
+.computing-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background-color: color-mix(in srgb, var(--ui-bg, #f3f4f6) 72%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.computing-dialog {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: min(100%, 360px);
+  padding: 20px 24px;
+  border: 1px solid var(--ui-overlay-border, #e2e8f0);
+  border-radius: 8px;
+  background-color: var(--ui-surface, #fff);
+  color: var(--ui-text, #0f172a);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+}
+
+.computing-dialog > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.computing-dialog h2,
+.computing-dialog p {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.computing-dialog h2 {
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.computing-dialog p {
+  margin-top: 3px;
+  color: var(--ui-muted, #64748b);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.computing-progress {
+  width: 100%;
+  height: 6px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 3px;
+  background-color: var(--ui-surface-2, #f8fafc);
+}
+
+.computing-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background-color: var(--ui-accent, #2563eb);
+  transition: width 0.2s ease;
+}
+
+.computing-percent {
+  display: block;
+  margin-top: 5px;
+  color: var(--ui-muted, #64748b);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.computing-spinner {
+  flex: 0 0 auto;
+  color: var(--ui-accent, #2563eb);
+  animation: computing-spin 0.9s linear infinite;
+}
+
+@keyframes computing-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .computing-spinner,
+  .computing-progress span {
+    animation: none;
+    transition: none;
+  }
+}
+
 /* ---------- Chart view ---------- */
 .chart-view {
   flex: 1 1 auto;

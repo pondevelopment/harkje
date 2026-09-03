@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, computed } from '@angular/core';
 import { ChartThemeId, SiteThemeId } from '../models/org.types';
 
 /**
@@ -14,12 +14,12 @@ export class ThemeService {
   private readonly SITE_STORAGE_KEY = 'harkje.siteTheme';
   private readonly CHART_STORAGE_KEY = 'harkje.chartTheme';
 
-  readonly siteThemes: readonly { id: SiteThemeId; label: string }[] = [
+  readonly siteThemes: ReadonlyArray<{ id: SiteThemeId; label: string }> = [
     { id: 'light', label: 'Light' },
     { id: 'dark', label: 'Dark' },
   ];
 
-  readonly chartThemes: readonly { id: ChartThemeId; label: string }[] = [
+  readonly chartThemes: ReadonlyArray<{ id: ChartThemeId; label: string }> = [
     { id: 'light', label: 'Light' },
     { id: 'soft', label: 'Soft' },
     { id: 'warm', label: 'Warm' },
