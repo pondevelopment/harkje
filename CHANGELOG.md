@@ -7,6 +7,13 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## 2.0.3 — 2026-09-03
+
+### Fixed
+
+- **GitHub Pages deployment**: upload `dist/harkje/browser`, where Angular
+  writes `index.html`, instead of its parent directory.
+
 ## 2.0.2 — 2026-09-03
 
 ### Added
@@ -26,8 +33,6 @@ and adheres to [Semantic Versioning](https://semver.org/).
   missing manager rows are synthesized; multiple top-level groups are connected
   below an `Organization` root; self-manager links and multi-person manager cycles
   are repaired deterministically with explicit warnings.
-- **Deployment**: GitHub Pages now uploads the Angular output from `dist/harkje`.
-
 ### Removed
 
 - **ESLint configuration**: removed the incompatible Angular lint target and its
