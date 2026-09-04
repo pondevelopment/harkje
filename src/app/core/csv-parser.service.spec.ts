@@ -234,6 +234,34 @@ describe('CsvParserService', () => {
       expect(nodes[0]!.department).toBe('');
       expect(nodes[0]!.details).toBe('');
     });
+
+    it('warns and generates a collision-free id for a blank id cell', () => {
+      const csv = 'user,manager,id\nRoot,,1\nAlice,Root,\nBob,Root,1-1';
+      const nodes = service.buildFlatNodesFromCsv(csv);
+
+      const root = nodes.find((n) => n.name === 'Root')!;
+      const alice = nodes.find((n) => n.name === 'Alice')!;
+      const bob = nodes.find((n) => n.name === 'Bob')!;
+      // Alice's blank id got a generated (non-colliding) id, not "2" blindly.
+      expect(alice.id).not.toBe('');
+      expect(new Set(nodes.map((n) => n.id)).size).toBe(nodes.length);
+      expect(bob.parentId).toBe(root.id);
+      expect(alice.parentId).toBe(root.id);
+      expect(service.warnings).toContain(
+        'Row 2: blank id for "Alice"; a generated id was used.',
+      );
+    });
+
+    it('warns when an explicit parentId references a nonexistent id', () => {
+      const csv = 'user,manager,title,department,details,id,parentId\nRoot,,X,Y,,1,null\nA,Root,R,Y,,2,typo-3';
+      const nodes = service.buildFlatNodesFromCsv(csv);
+      const a = nodes.find((n) => n.name === 'A')!;
+
+      expect(a.parentId).toBe('typo-3');
+      expect(service.warnings).toContain(
+        'Row 2: parentId "typo-3" for "A" does not exist; the node is treated as a separate top-level group.',
+      );
+    });
   });
 
   // ------------------------- csvEscape -------------------------

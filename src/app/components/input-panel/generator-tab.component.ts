@@ -125,7 +125,7 @@ export class GeneratorTabComponent {
       if (!Array.isArray(flatNodes) || flatNodes.length === 0) {
         throw new Error('Generator returned empty or invalid data structure.');
       }
-      const newRoot = this.treeService.buildTree(flatNodes);
+      const { root: newRoot } = this.treeService.buildTree(flatNodes);
       if (newRoot) {
         this.dataChange.emit(newRoot);
       }

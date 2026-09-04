@@ -7,6 +7,32 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## 2.2.0 — 2026-09-04
+
+### Added
+
+- **Import warnings for silent fixes**: CSV and JSON imports now report every
+  automatic correction that previously happened silently:
+  - a missing `parentId`/`managerId` reference now emits a warning naming the
+    node and the dangling id (the node detaches as a separate top-level group
+    instead of silently disappearing from the chart);
+  - when a flat list yields multiple disconnected top-level groups, a warning
+    lists the groups that are not rendered;
+  - a blank `id` cell in a CSV that has an `id` column emits a warning, and
+    the generated fallback id is now collision-safe (it can no longer
+    silently overwrite another node).
+- **List Editor (JSON) warnings**: the JSON tab now shows an "Import warnings"
+  box (mirroring the CSV tab), so tree-builder warnings are visible for JSON
+  imports too.
+
+### Changed
+
+- **`buildTree()` contract**: `OrgTreeService.buildTree()` now returns
+  `{ root, warnings }` instead of `OrgNode | null`. Callers that need to
+  surface import issues should read and display the returned warnings
+  (internal call sites updated; the generator ignores them as generated data
+  is always valid).
+
 ## 2.1.0 — 2026-09-04
 
 ### Added

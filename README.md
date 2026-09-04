@@ -113,7 +113,9 @@ Example:
 For CSV imports, a referenced manager without their own row is added automatically. When an import has multiple top-level groups, the importer connects them under a generated organization root. The importer lists every automatic correction so the source CSV can be fixed.
 If a user lists themselves as manager, the importer clears that manager relationship and includes the correction in the warning list.
 If multiple users form a manager cycle, the importer reconnects the earliest CSV row in that cycle to the organization root and reports the correction.
-
+If an `id` column is present but a row's id cell is blank, a collision-free generated id is used and a warning is emitted.
+If a `parentId`/`managerId` references an id that does not exist, a warning names the node and the missing id — the node detaches as a separate top-level group instead of silently disappearing.
+When a flat list (CSV or JSON import, or the tree builder shared by both editors) yields multiple disconnected top-level groups, the builder picks a root (favoring CEO/president/founder/director/chief titles) and emits a warning listing the groups that are not rendered.
 
 ## Running locally
 

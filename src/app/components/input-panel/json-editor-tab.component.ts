@@ -20,6 +20,7 @@ import { OrgTreeService } from '../../core/org-tree.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @let err = error();
+    @let warningMessages = warnings();
     <div class="editor">
       <label class="editor-label">Structure Data (Flat Array)</label>
       <p class="editor-hint">
@@ -41,6 +42,16 @@ import { OrgTreeService } from '../../core/org-tree.service';
         <strong>Error:</strong> {{ err }}
       </div>
     }
+    @if (warningMessages.length > 0) {
+      <div class="warning-box">
+        <strong>Import warnings:</strong>
+        <ul>
+          @for (message of warningMessages; track $index) {
+            <li>{{ message }}</li>
+          }
+        </ul>
+      </div>
+    }
   `,
   styleUrls: ['./input-panel-shared.scss'],
 })
@@ -52,6 +63,7 @@ export class JsonEditorTabComponent {
 
   readonly jsonInput = signal('');
   readonly error = signal<string | null>(null);
+  readonly warnings = signal<readonly string[]>([]);
 
   constructor() {
     // Sync JSON editor when the chart updates (e.g. from generator).
@@ -70,17 +82,20 @@ export class JsonEditorTabComponent {
       if (!Array.isArray(parsed)) {
         throw new Error('Input must be an array of employees.');
       }
-      const newRoot = this.treeService.buildTree(parsed);
+      const { root: newRoot, warnings: treeWarnings } = this.treeService.buildTree(parsed);
       if (newRoot) {
         this.dataChange.emit(newRoot);
         this.error.set(null);
+        this.warnings.set(treeWarnings);
       } else {
         this.error.set(
           'Could not build tree. Ensure exactly one node has parentId: null (the CEO/Root).',
         );
+        this.warnings.set(treeWarnings);
       }
     } catch (e: any) {
       this.error.set('Invalid JSON format: ' + e.message);
+      this.warnings.set([]);
     }
   }
 }

@@ -1,12 +1,24 @@
 import { Injectable } from '@angular/core';
 import { FlatNode, OrgNode } from '../models/org.types';
 
+/** Result of building a tree from a flat list. */
+export interface BuildTreeResult {
+  /** The resolved root node, or null when no root could be found. */
+  root: OrgNode | null;
+  /**
+   * Non-fatal issues fixed along the way (dangling parent ids, unrendered
+   * top-level groups). Callers should surface these to the user.
+   */
+  warnings: string[];
+}
+
 /**
  * Pure helpers for converting between the nested `OrgNode` tree and the flat
  * `FlatNode[]` list, plus building a validated tree from flat nodes.
  *
  * Invariants maintained: exactly one root, ids are strings, no cycles, parent
- * references must resolve (orphaned nodes become implicit roots and warn).
+ * references must resolve (orphaned nodes become implicit roots and are
+ * reported as warnings).
  */
 @Injectable({ providedIn: 'root' })
 export class OrgTreeService {
@@ -26,8 +38,9 @@ export class OrgTreeService {
     return result;
   }
 
-  /** Convert flat array → nested tree. Returns null if no root found. */
-  buildTree(flatNodes: FlatNode[]): OrgNode | null {
+  /** Convert flat array → nested tree. Returns { root: null } if no root found. */
+  buildTree(flatNodes: FlatNode[]): BuildTreeResult {
+    const warnings: string[] = [];
     const idMapping: Record<string, OrgNode> = {};
     const allIds = new Set<string>();
 
@@ -58,6 +71,12 @@ export class OrgTreeService {
       const parentExists = allIds.has(parentIdStr);
 
       if (isExplicitRoot || !parentExists) {
+        if (!isExplicitRoot) {
+          warnings.push(
+            `Row for "${node.name}": parentId "${parentIdStr}" does not exist; ` +
+            `the node was detached as a separate top-level group.`,
+          );
+        }
         potentialRoots.push(current);
       } else {
         const parent = idMapping[parentIdStr];
@@ -65,18 +84,22 @@ export class OrgTreeService {
       }
     }
 
-    if (potentialRoots.length === 0) return null;
+    if (potentialRoots.length === 0) return { root: null, warnings };
 
     let root = potentialRoots[0]!;
     if (potentialRoots.length > 1) {
-      // eslint-disable-next-line no-console
-      console.warn('Multiple roots detected:', potentialRoots.map((r) => r.name));
       const leader = potentialRoots.find((r) =>
         /ceo|president|founder|director|chief/i.test(r.title || r.name),
       );
       if (leader) root = leader;
+      const dropped = potentialRoots.filter((r) => r !== root);
+      const droppedNames = dropped.map((r) => `"${r.name}"`).join(', ');
+      warnings.push(
+        `${potentialRoots.length} separate top-level groups found; the group rooted at ` +
+        `"${root.name}" is used. Others are not rendered: ${droppedNames}.`,
+      );
     }
 
-    return root;
+    return { root, warnings };
   }
 }

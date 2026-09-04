@@ -13,7 +13,7 @@ describe('AdaptiveOrgLayoutService performance', () => {
     }
 
     const flatNodes = new CsvParserService().buildFlatNodesFromCsv(lines.join('\n'));
-    const tree = new OrgTreeService().buildTree(flatNodes);
+    const tree = new OrgTreeService().buildTree(flatNodes).root;
     expect(tree).not.toBeNull();
 
     const root = d3.hierarchy(tree!);

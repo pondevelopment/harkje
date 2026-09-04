@@ -125,16 +125,16 @@ export class CsvEditorTabComponent {
 
       this.updateProgress('Building hierarchy...', 50);
       await this.waitForPaint();
-      const newRoot = this.treeService.buildTree(flatNodes);
+      const { root: newRoot, warnings: treeWarnings } = this.treeService.buildTree(flatNodes);
       if (newRoot) {
         this.updateProgress('Computing and rendering chart...', 70);
         await this.waitForPaint();
         this.dataChange.emit(newRoot);
         this.error.set(null);
-        this.warnings.set([...this.csv.warnings]);
+        this.warnings.set([...this.csv.warnings, ...treeWarnings]);
       } else {
         this.processingAbort.emit();
-        this.warnings.set([]);
+        this.warnings.set([...this.csv.warnings, ...treeWarnings]);
         this.error.set(
           'Could not build tree from CSV. Ensure exactly one row has an empty manager (the root).',
         );

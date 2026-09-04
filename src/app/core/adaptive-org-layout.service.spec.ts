@@ -676,7 +676,7 @@ describe('AdaptiveOrgLayoutService', () => {
       'M',
       'Default',
       2,
-    ));
+    )).root;
     expect(data).not.toBeNull();
     const root = d3.hierarchy(data!);
     expect(root.descendants()).toHaveLength(16);
@@ -709,7 +709,7 @@ describe('AdaptiveOrgLayoutService', () => {
       'M',
       'Default',
       6,
-    ));
+    )).root;
     expect(data).not.toBeNull();
     const root = d3.hierarchy(data!);
     expect(root.descendants()).toHaveLength(20);
@@ -963,7 +963,7 @@ describe('AdaptiveOrgLayoutService', () => {
       'XXL',
       'Default',
       13,
-    ));
+    )).root;
     expect(data).not.toBeNull();
     const root = d3.hierarchy(data!);
     expect(root.descendants()).toHaveLength(73);
@@ -1016,7 +1016,7 @@ describe('AdaptiveOrgLayoutService', () => {
       'XXL',
       'Default',
       2,
-    ));
+    )).root;
     expect(data).not.toBeNull();
     const root = d3.hierarchy(data!);
     expect(root.descendants()).toHaveLength(76);
@@ -1110,7 +1110,7 @@ describe('AdaptiveOrgLayoutService', () => {
           size,
           'stress',
           `recursive-${size}-${seed}`,
-        ));
+        )).root;
         expect(data).not.toBeNull();
         const root = d3.hierarchy(data!);
         for (const target of [0.25, 0.5, 1, 2, 4]) {

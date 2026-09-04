@@ -164,10 +164,35 @@ export class CsvParserService {
     const nameToId = new Map<string, string>();
     const nodes: FlatNode[] = [];
 
+    // Used to generate collision-free ids for rows with a blank id cell (and
+    // for synthesized manager/root nodes below). Initialized so that a
+    // row-index fallback can never silently overwrite an explicit id.
+    const usedIds = new Set<string>();
+    const nextGeneratedId = (prefix: string): string => {
+      let suffix = 1;
+      let id = `${prefix}-${suffix}`;
+      while (usedIds.has(id)) {
+        suffix++;
+        id = `${prefix}-${suffix}`;
+      }
+      usedIds.add(id);
+      return id;
+    };
+
     temp.forEach((t, i) => {
-      const id = usesExplicitId
-        ? String(col(t.row, ['id']).trim() || i + 1)
-        : String(i + 1);
+      const explicitId = usesExplicitId ? col(t.row, ['id']).trim() : '';
+      let id: string;
+      if (explicitId) {
+        id = String(explicitId);
+        usedIds.add(id);
+      } else {
+        if (usesExplicitId) {
+          this.importWarnings.push(
+            `Row ${i + 1}: blank id for "${t.name}"; a generated id was used.`,
+          );
+        }
+        id = nextGeneratedId(String(i + 1));
+      }
       const key = normalizeKey(t.name);
       if (nameToId.has(key)) {
         throw new Error(
@@ -191,18 +216,6 @@ export class CsvParserService {
     });
 
     // Resolve parentId.
-    const usedIds = new Set(nodes.map((node) => node.id));
-    const nextGeneratedId = (prefix: string): string => {
-      let suffix = 1;
-      let id = `${prefix}-${suffix}`;
-      while (usedIds.has(id)) {
-        suffix++;
-        id = `${prefix}-${suffix}`;
-      }
-      usedIds.add(id);
-      return id;
-    };
-
     nodes.forEach((n, idx) => {
       const row = temp[idx]!.row;
       const explicitParentId = headerRow
@@ -248,6 +261,18 @@ export class CsvParserService {
           }
           n.parentId = pid;
         }
+      }
+    });
+
+    // Warn about dangling parent ids (explicit parentId/managerId that does
+    // not resolve to any node). buildTree would silently detach these into
+    // separate top-level groups; surface the problem here as well.
+    nodes.forEach((n, idx) => {
+      const pid = String(n.parentId);
+      if (pid !== 'null' && !usedIds.has(pid)) {
+        this.importWarnings.push(
+          `Row ${idx + 1}: parentId "${pid}" for "${n.name}" does not exist; the node is treated as a separate top-level group.`,
+        );
       }
     });
 
