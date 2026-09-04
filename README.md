@@ -139,9 +139,11 @@ npm run watch    # Watch build (development)
 npm test         # Run the Vitest test suite once
 ```
 
-A `prebuild` step writes `src/environments/build-info.ts` from the current git sha +
-timestamp before each build (see `scripts/generate-build-info.mjs`); in dev a
-placeholder is swapped in via `angular.json` `fileReplacements`.
+A `prebuild` step writes `src/environments/build-info.ts` from the package version,
+current git sha + timestamp before each build (see `scripts/generate-build-info.mjs`);
+in dev a placeholder is swapped in via `angular.json` `fileReplacements`.
+The version + sha are shown in the info pill at the bottom-right of the chart
+area (hover the version for the full build sha; the pill is excluded from exports).
 
 
 ## How generation works (no AI)
@@ -161,15 +163,19 @@ Both return a `FlatNode[]` that forms a valid tree with exactly one root.
 The chart component exposes imperative methods (called via `@ViewChild`):
 
 - `exportImage()`: exports the current chart viewport to a PNG using `html-to-image`.
+- `exportSvg()`: exports the current chart to a standalone SVG using native SVG primitives (rects, text, paths).
 - `runCompaction()`: runs an optional compaction pass to reduce whitespace.
 
 Export details:
 
-- The exported PNG is **cropped to the chart bounds**.
-- The PNG background is **transparent** (good for presentations).
+- Exports are **cropped to the chart bounds**.
+- Export backgrounds are **transparent** (good for presentations).
 - The export reflects the current theme for node cards and link lines.
+- The SVG export replaces HTML cards with native SVG primitives (text, rects,
+  counts as circles), so the file opens in any browser tab, image viewer, or
+  design tool (Illustrator/Inkscape) without foreignObject support.
 
-The download button in `app.component.ts` calls this method (wired to the chart component via `@ViewChild`).
+The download buttons in `app.component.ts` call these methods (wired to the chart component via `@ViewChild`).
 
 ## Chart controls
 
@@ -179,6 +185,7 @@ The toolbar (top of the main area) provides:
 - Chart theme selector (Light / Soft / Warm / Pencil / Classic / Dark / High Contrast)
 - Target aspect ratio slider: influences how the layout engine wraps/grids large child groups
 - Download image: exports a PNG
+- Download SVG: exports a self-contained SVG
 - Compact layout: runs an optional compaction pass to reduce whitespace
 
 The sidebar (left) can be dragged to resize, collapsed/expanded with the grip

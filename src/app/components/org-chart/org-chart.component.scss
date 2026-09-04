@@ -68,10 +68,14 @@
   pointer-events: none;
 }
 
-.org-chart-pill a {
+.org-chart-pill__sep {
+  opacity: 0.5;
+}
+
+.org-chart-pill__version {
   color: var(--overlay-text);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
 }
 
 .org-chart-dot {

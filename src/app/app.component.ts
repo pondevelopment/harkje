@@ -146,6 +146,16 @@ import { OrgChartComponent } from './components/org-chart/org-chart.component';
           <button
             type="button"
             class="tool tool--btn"
+            (click)="handleDownloadSvg()"
+            title="Download vector image (SVG)"
+          >
+            <lucide-icon [img]="Download" [size]="18" />
+            <span>Download SVG</span>
+          </button>
+
+          <button
+            type="button"
+            class="tool tool--btn"
             (click)="handleCompact()"
             title="Run an optional compaction pass to reduce whitespace"
           >
@@ -363,6 +373,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
   handleDownload(): void {
     this.chartRef?.exportImage();
+  }
+
+  handleDownloadSvg(): void {
+    this.chartRef?.exportSvg();
   }
 
   handleCompact(): void {

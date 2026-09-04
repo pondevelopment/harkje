@@ -7,6 +7,25 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## 2.1.0 — 2026-09-04
+
+### Added
+
+- **SVG export**: a new "Download SVG" toolbar button exports the chart as a
+  standalone SVG file using native SVG primitives (cards as rects/text, theme
+  colors resolved at export time). The file opens in any browser tab, image
+  viewer, or design tool — no `foreignObject` HTML involved.
+- **Version display**: the build version (from `package.json`) is shown in the
+  chart info pill, with the full git build SHA as its tooltip. The prebuild
+  script now writes `BUILD_VERSION` alongside the existing SHA/timestamp.
+
+### Fixed
+
+- **Export stability**: chart exports no longer trigger a mid-export re-render —
+  the container `ResizeObserver` is suppressed while an export is mutating the
+  chart DOM, preventing clipped PNG output when the export resize raced the
+  renderer.
+
 ## 2.0.3 — 2026-09-03
 
 ### Fixed

@@ -27,6 +27,7 @@ import {
   CARD_HEIGHT,
   CARD_WIDTH,
 } from '../../core/adaptive-org-layout.service';
+import { BUILD_SHA, BUILD_VERSION } from '../../../environments/build-info';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -41,7 +42,8 @@ import {
  *   - `[targetAspectRatio]` drives the row/grid/wrap layout decision
  *   - `[direction]`    layout direction (TopDown/LeftRight)
  *
- * Imperative methods (call via `@ViewChild`): `exportImage()`, `runCompaction()`.
+ * Imperative methods (call via `@ViewChild`): `exportImage()` (PNG), `exportSvg()` (SVG),
+ * `runCompaction()`.
  */
 @Component({
   selector: 'app-org-chart',
@@ -65,9 +67,11 @@ import {
           >Source</a
         >
       </div>
-      <div data-export-exclude="true" class="org-chart-pill org-chart-pill--right">
+      <div data-export-exclude="true" class="org-chart-pill org-chart-pill--right" [attr.data-version]="version">
         <span class="org-chart-dot"></span>
         Overlap-Free Engine v3 (Compact)
+        <span class="org-chart-pill__sep" aria-hidden="true">•</span>
+        <span class="org-chart-pill__version" [title]="shaTooltip">harkje v{{ version }}</span>
       </div>
     </div>
   `,
@@ -89,6 +93,10 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   /** Reports completion of a render attempt for the exact input data object. */
   readonly renderSettled = output<{ data: OrgNode; error?: unknown }>();
 
+  /** Build info displayed in the chart info pill (excluded from exports). */
+  readonly version: string = BUILD_VERSION ?? 'unknown';
+  readonly shaTooltip: string = BUILD_SHA ? `Build ${BUILD_SHA}` : 'Local development build';
+
   @ViewChild('container', { static: true })
   containerRef!: ElementRef<HTMLDivElement>;
   @ViewChild('svg', { static: true })
@@ -96,6 +104,9 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
 
   private dimensions = signal({ width: 800, height: 600 });
   private resizeObserver?: ResizeObserver;
+
+  /** True while an export is mutating the container (suppresses resize re-renders). */
+  private isExporting = false;
 
   /** Layout bounds of the last render (used for export + auto-fit). */
   private layoutBounds: {
@@ -141,6 +152,10 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
 
   ngAfterViewInit(): void {
     this.resizeObserver = new ResizeObserver(() => {
+      // Ignore container resizes while an export is mutating the container —
+      // otherwise the export resize triggers a full re-render mid-serialization
+      // which clobbers the export transform and clips the output.
+      if (this.isExporting) return;
       const el = this.containerRef.nativeElement;
       this.dimensions.set({ width: el.clientWidth, height: el.clientHeight });
     });
@@ -163,45 +178,13 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
       alert('Chart is not ready to export yet. Please try again in a moment.');
       return;
     }
-    const svgEl = this.svgRef.nativeElement;
-    const gEl = svgEl.querySelector('g');
-    if (!gEl) {
-      alert('Chart is not ready to export yet. Please try again in a moment.');
-      return;
-    }
-
-    const padding = 40;
-    const { minX, minY, treeWidth, treeHeight } = this.layoutBounds;
-    const exportWidth = Math.max(1, Math.ceil(treeWidth + padding * 2));
-    const exportHeight = Math.max(1, Math.ceil(treeHeight + padding * 2));
-
     const containerEl = this.containerRef.nativeElement;
-    const prevContainerWidth = containerEl.style.width;
-    const prevContainerHeight = containerEl.style.height;
-    const prevContainerOverflow = containerEl.style.overflow;
-    const prevContainerBg = containerEl.style.background;
-    const prevContainerBgColor = containerEl.style.backgroundColor;
-    const prevSvgWidth = svgEl.getAttribute('width');
-    const prevSvgHeight = svgEl.getAttribute('height');
-    const prevGTransform = gEl.getAttribute('transform');
 
-    const excludedEls = Array.from(
-      containerEl.querySelectorAll('[data-export-exclude="true"]'),
-    ) as HTMLElement[];
-    const prevExcludedDisplay = excludedEls.map((el) => el.style.display);
-
+    let restore:
+      | ((() => void) & { exportWidth: number; exportHeight: number })
+      | undefined;
     try {
-      excludedEls.forEach((el) => (el.style.display = 'none'));
-      containerEl.style.width = `${exportWidth}px`;
-      containerEl.style.height = `${exportHeight}px`;
-      containerEl.style.overflow = 'hidden';
-      containerEl.style.backgroundColor = 'transparent';
-      svgEl.setAttribute('width', String(exportWidth));
-      svgEl.setAttribute('height', String(exportHeight));
-      gEl.setAttribute('transform', `translate(${padding - minX},${padding - minY})`);
-
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      restore = await this.prepareChartForExport();
 
       // Warmup run
       try {
@@ -209,8 +192,8 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
           quality: 0.1,
           skipFonts: true,
           pixelRatio: 1,
-          width: exportWidth,
-          height: exportHeight,
+          width: restore.exportWidth,
+          height: restore.exportHeight,
           backgroundColor: 'transparent',
         });
       } catch {
@@ -223,31 +206,287 @@ export class OrgChartComponent implements AfterViewInit, OnChanges, OnDestroy {
         cacheBust: true,
         backgroundColor: 'transparent',
         skipFonts: true,
-        width: exportWidth,
-        height: exportHeight,
+        width: restore.exportWidth,
+        height: restore.exportHeight,
       });
 
       const link = document.createElement('a');
-      link.download = `org-chart-${new Date().toISOString().slice(0, 10)}.png`;
+      link.download = this.exportFilename('png');
       link.href = dataUrl;
       link.click();
     } catch (err) {
       console.error('Failed to export image', err);
       alert('Failed to export image. Please try using a modern desktop browser (Chrome/Edge/Firefox).');
     } finally {
+      restore?.();
+    }
+  }
+
+  /** Shared export filename: org-chart-YYYY-MM-DD.<ext> */
+  private exportFilename(ext: 'png' | 'svg'): string {
+    return `org-chart-${new Date().toISOString().slice(0, 10)}.${ext}`;
+  }
+
+  /**
+   * Hide export-excluded overlays, size the container/SVG to the tight chart
+   * bounds plus padding, and translate the chart group. Returns a restore
+   * callback (also carries exportWidth/exportHeight).
+   */
+  private async prepareChartForExport(): Promise<
+    (() => void) & { exportWidth: number; exportHeight: number }
+  > {
+    const svgEl = this.svgRef!.nativeElement as SVGSVGElement;
+    const gEl = svgEl.querySelector('g')!;
+    const containerEl = this.containerRef!.nativeElement;
+
+    const padding = 40;
+    const { minX, minY, treeWidth, treeHeight } = this.layoutBounds!;
+    const exportWidth = Math.max(1, Math.ceil(treeWidth + padding * 2));
+    const exportHeight = Math.max(1, Math.ceil(treeHeight + padding * 2));
+
+    const prevContainerWidth = containerEl.style.width;
+    const prevContainerHeight = containerEl.style.height;
+    const prevContainerOverflow = containerEl.style.overflow;
+    const prevSvgWidth = svgEl.getAttribute('width');
+    const prevSvgHeight = svgEl.getAttribute('height');
+    const prevGTransform = gEl.getAttribute('transform');
+
+    const excludedEls = Array.from(
+      containerEl.querySelectorAll('[data-export-exclude="true"]'),
+    ) as HTMLElement[];
+    const prevExcludedDisplay = excludedEls.map((el) => el.style.display);
+
+    // Suppress resize-driven re-renders while the export mutates the container.
+    this.isExporting = true;
+    excludedEls.forEach((el) => (el.style.display = 'none'));
+    containerEl.style.width = `${exportWidth}px`;
+    containerEl.style.height = `${exportHeight}px`;
+    containerEl.style.overflow = 'hidden';
+    svgEl.setAttribute('width', String(exportWidth));
+    svgEl.setAttribute('height', String(exportHeight));
+    gEl.setAttribute('transform', `translate(${padding - minX},${padding - minY})`);
+
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    const restoreFn = () => {
       excludedEls.forEach((el, i) => (el.style.display = prevExcludedDisplay[i] ?? ''));
       containerEl.style.width = prevContainerWidth;
       containerEl.style.height = prevContainerHeight;
       containerEl.style.overflow = prevContainerOverflow;
-      containerEl.style.background = prevContainerBg;
-      containerEl.style.backgroundColor = prevContainerBgColor;
       if (prevSvgWidth === null) svgEl.removeAttribute('width');
       else svgEl.setAttribute('width', prevSvgWidth);
       if (prevSvgHeight === null) svgEl.removeAttribute('height');
       else svgEl.setAttribute('height', prevSvgHeight);
       if (prevGTransform === null) gEl.removeAttribute('transform');
       else gEl.setAttribute('transform', prevGTransform);
+      // React to the restored container size (and re-enable RO handling).
+      this.isExporting = false;
+      const el = this.containerRef?.nativeElement;
+      if (el) this.dimensions.set({ width: el.clientWidth, height: el.clientHeight });
+    };
+    return Object.assign(restoreFn, { exportWidth, exportHeight });
+  }
+
+  /** Export an SVG of the tight chart bounds (native primitives, no DOM mutation). */
+  async exportSvg(): Promise<void> {
+    if (!this.containerRef?.nativeElement || !this.svgRef?.nativeElement) return;
+    if (!this.layoutBounds) {
+      alert('Chart is not ready to export yet. Please try again in a moment.');
+      return;
     }
+    const svgEl = this.svgRef.nativeElement;
+    const gEl = svgEl.querySelector('g');
+    if (!gEl) {
+      alert('Chart is not ready to export yet. Please try again in a moment.');
+      return;
+    }
+
+    try {
+      const { minX, minY, treeWidth, treeHeight } = this.layoutBounds;
+      const padding = 40;
+      const exportWidth = Math.max(1, Math.ceil(treeWidth + padding * 2));
+      const exportHeight = Math.max(1, Math.ceil(treeHeight + padding * 2));
+
+      // Clone the live SVG (detached) and frame the tight chart bounds.
+      const clonedSvg = svgEl.cloneNode(true) as SVGSVGElement;
+      clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      clonedSvg.removeAttribute('id');
+      clonedSvg.removeAttribute('class');
+      clonedSvg.removeAttribute('style');
+      clonedSvg.setAttribute('width', String(exportWidth));
+      clonedSvg.setAttribute('height', String(exportHeight));
+      clonedSvg.setAttribute('viewBox', `0 0 ${exportWidth} ${exportHeight}`);
+      clonedSvg
+        .querySelector('g')
+        ?.setAttribute(
+          'transform',
+          `translate(${padding - minX},${padding - minY})`,
+        );
+
+      // Replace foreignObject HTML cards with native SVG primitives so the
+      // file renders in every viewer (browser tab, design tools, and <img>).
+      const computed = window.getComputedStyle(this.containerRef.nativeElement);
+      this.replaceExportCards(clonedSvg, svgEl, computed);
+
+      const markup = new XMLSerializer().serializeToString(clonedSvg);
+      const blob = new Blob([markup], { type: 'image/svg+xml;charset=utf-8' });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = this.exportFilename('svg');
+      link.href = objectUrl;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
+    } catch (err) {
+      console.error('Failed to export SVG', err);
+      alert('Failed to export SVG. Please try using a modern desktop browser (Chrome/Edge/Firefox).');
+    }
+  }
+
+  /**
+   * foreignObject HTML depends on viewer support (and taints canvases). Replace
+   * detached export cards with native SVG elements while retaining the selected
+   * chart theme and core person information.
+   */
+  private replaceExportCards(
+    clonedSvg: SVGSVGElement,
+    sourceSvg: SVGSVGElement,
+    computed: CSSStyleDeclaration,
+  ): void {
+    const namespace = 'http://www.w3.org/2000/svg';
+    const sourceNodes = Array.from(sourceSvg.querySelectorAll<SVGGElement>('g.node'));
+    const clonedNodes = Array.from(clonedSvg.querySelectorAll<SVGGElement>('g.node'));
+    const cardBg = this.exportColor(computed, '--card-bg', '#ffffff');
+    const cardBorder = this.exportColor(computed, '--card-border', '#e2e8f0');
+    const managerBorder = this.exportColor(
+      computed,
+      '--card-border-manager',
+      cardBorder,
+    );
+    const nameColor = this.exportColor(computed, '--card-name', '#0f172a');
+    const titleColor = this.exportColor(computed, '--card-title', '#4f46e5');
+    const departmentColor = this.exportColor(computed, '--card-dept', '#64748b');
+
+    clonedNodes.forEach((clonedNode, index) => {
+      const sourceNode = sourceNodes[index] as
+        | (SVGGElement & { __data__?: d3.HierarchyNode<OrgNode> })
+        | undefined;
+      const datum = sourceNode?.__data__;
+      if (!datum) return;
+      clonedNode.querySelector('foreignObject')?.remove();
+      clonedNode.removeAttribute('class');
+
+      const data = datum.data;
+      const hasChildren = !!(data.children && data.children.length > 0);
+      const rect = document.createElementNS(namespace, 'rect');
+      rect.setAttribute('x', String(-CARD_WIDTH / 2));
+      rect.setAttribute('y', '0');
+      rect.setAttribute('width', String(CARD_WIDTH));
+      rect.setAttribute('height', String(CARD_HEIGHT));
+      rect.setAttribute('rx', '6');
+      rect.setAttribute('fill', cardBg);
+      rect.setAttribute('stroke', hasChildren ? managerBorder : cardBorder);
+      rect.setAttribute('stroke-width', '1');
+      clonedNode.appendChild(rect);
+
+      const divider = document.createElementNS(namespace, 'line');
+      divider.setAttribute('x1', '-78');
+      divider.setAttribute('x2', '78');
+      divider.setAttribute('y1', '48');
+      divider.setAttribute('y2', '48');
+      divider.setAttribute('stroke', cardBorder);
+      divider.setAttribute('stroke-width', '0.75');
+      clonedNode.appendChild(divider);
+
+      clonedNode.appendChild(
+        this.exportText(
+          namespace,
+          this.truncateExportText(data.name, 22),
+          -78,
+          18,
+          nameColor,
+          '12px',
+          '700',
+        ),
+      );
+      clonedNode.appendChild(
+        this.exportText(
+          namespace,
+          this.truncateExportText(data.title, 28),
+          -78,
+          34,
+          titleColor,
+          '10px',
+          '600',
+        ),
+      );
+      clonedNode.appendChild(
+        this.exportText(
+          namespace,
+          this.truncateExportText((data.department || 'General').toUpperCase(), 27),
+          -78,
+          64,
+          departmentColor,
+          '9px',
+          '500',
+        ),
+      );
+
+      if (hasChildren) {
+        const count = data.children!.length;
+        const badge = document.createElementNS(namespace, 'circle');
+        badge.setAttribute('cx', '76');
+        badge.setAttribute('cy', '14');
+        badge.setAttribute('r', '8');
+        badge.setAttribute('fill', 'none');
+        badge.setAttribute('stroke', titleColor);
+        badge.setAttribute('stroke-width', '1');
+        clonedNode.appendChild(badge);
+        const countText = this.exportText(
+          namespace,
+          String(count),
+          76,
+          17,
+          titleColor,
+          '8px',
+          '700',
+        );
+        countText.setAttribute('text-anchor', 'middle');
+        clonedNode.appendChild(countText);
+      }
+    });
+  }
+
+  private exportText(
+    namespace: string,
+    value: string,
+    x: number,
+    y: number,
+    fill: string,
+    fontSize: string,
+    fontWeight: string,
+  ): SVGTextElement {
+    const text = document.createElementNS(namespace, 'text') as SVGTextElement;
+    text.setAttribute('x', String(x));
+    text.setAttribute('y', String(y));
+    text.setAttribute('fill', fill);
+    text.setAttribute('font-family', 'Arial, sans-serif');
+    text.setAttribute('font-size', fontSize);
+    text.setAttribute('font-weight', fontWeight);
+    text.textContent = value;
+    return text;
+  }
+
+  private exportColor(
+    computed: CSSStyleDeclaration,
+    property: string,
+    fallback: string,
+  ): string {
+    return computed.getPropertyValue(property).trim() || fallback;
+  }
+
+  private truncateExportText(value: string, maxLength: number): string {
+    return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`;
   }
 
   /** Run an optional compaction pass to reduce whitespace (animated). */
